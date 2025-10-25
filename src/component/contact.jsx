@@ -374,27 +374,67 @@ const Contact = () => {
 
       {/* ANIMATIONS */}
       <style>{`
-        @keyframes bounceIn {
-          0% { transform: scale(0.3); opacity: 0; }
-          50% { transform: scale(1.05); }
-          70% { transform: scale(0.9); }
-          100% { transform: scale(1); opacity: 1; }
-        }
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes rotatePlane {
-          0% { transform: rotate(0deg) translateY(0px); }
-          25% { transform: rotate(90deg) translateY(-15px); }
-          50% { transform: rotate(180deg) translateY(0px); }
-          75% { transform: rotate(270deg) translateY(-15px); }
-          100% { transform: rotate(360deg) translateY(0px); }
-        }
-        .animate-bounceIn { animation: bounceIn 0.6s ease-out; }
-        .animate-spin { animation: spin 1s linear infinite; }
-        .rotating-plane { 
-          animation: rotatePlane 8s linear infinite;
-          opacity: 0.8;
-        }
-      `}</style>
+  /* Existing animations */
+  @keyframes bounceIn {
+    0% { transform: scale(0.3); opacity: 0; }
+    50% { transform: scale(1.05); }
+    70% { transform: scale(0.9); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  @keyframes rotatePlane {
+    0% { transform: rotate(0deg) translateY(0px); }
+    25% { transform: rotate(90deg) translateY(-15px); }
+    50% { transform: rotate(180deg) translateY(0px); }
+    75% { transform: rotate(270deg) translateY(-15px); }
+    100% { transform: rotate(360deg) translateY(0px); }
+  }
+  .animate-bounceIn { animation: bounceIn 0.6s ease-out; }
+  .animate-spin { animation: spin 1s linear infinite; }
+  .rotating-plane { 
+    animation: rotatePlane 8s linear infinite;
+    opacity: 0.8;
+  }
+
+  /* New styles for select and option */
+  select {
+    background: rgba(255, 255, 255, 0.08); /* Match input background */
+    color: #ffffff; /* White text to match theme */
+    border: 1px solid rgba(255, 255, 255, 0.12); /* Match border */
+    appearance: none; /* Remove default browser styling */
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    padding-right: 2.5rem; /* Space for custom arrow */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23a9b1c3'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E"); /* Custom dropdown arrow */
+    background-repeat: no-repeat;
+    background-position: right 1rem center;
+    background-size: 1.2rem;
+  }
+
+  select option {
+    background: #0f1220; /* Dark background to match theme */
+    color: #ffffff; /* White text */
+  }
+
+  /* Ensure focus styles match theme */
+  select:focus {
+    outline: none;
+    border-color: #8b5cf6; /* Violet-500 */
+    box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.2); /* Match focus:ring */
+  }
+
+  /* Fix for browsers that don't respect option styling */
+  select::-webkit-scrollbar {
+    width: 8px;
+  }
+  select::-webkit-scrollbar-track {
+    background: #0f1220;
+  }
+  select::-webkit-scrollbar-thumb {
+    background: #8b5cf6;
+    border-radius: 4px;
+  }
+`}</style>
     </div>
   );
 };
