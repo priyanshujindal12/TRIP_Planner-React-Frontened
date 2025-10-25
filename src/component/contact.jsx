@@ -22,9 +22,9 @@ const Contact = () => {
 
 
   const EMAILJS_CONFIG = {
-    PUBLIC_KEY: import.meta.env.EMAILJS_PUBLIC_KEY,
-    SERVICE_ID: import.meta.env.EMAILJS_SERVICE_ID,
-    TEMPLATE_ID: import.meta.env.EMAILJS_TEMPLATE_ID
+    PUBLIC_KEY: import.meta.env.VITE_EMAILJS_PUBLIC_KEY,
+    SERVICE_ID: import.meta.env.VITE_EMAILJS_SERVICE_ID,
+    TEMPLATE_ID: import.meta.env.VITE_EMAILJS_TEMPLATE_ID
   };
 
 
@@ -373,7 +373,7 @@ const Contact = () => {
       )}
 
       {/* ANIMATIONS */}
-      <style jsx>{`
+      <style>{`
         @keyframes bounceIn {
           0% { transform: scale(0.3); opacity: 0; }
           50% { transform: scale(1.05); }
