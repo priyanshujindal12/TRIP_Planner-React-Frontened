@@ -3,6 +3,7 @@ import Login from './component/Login'
 import Contact from './component/contact'
 import Dashboard from './component/dashboard'
 import './App.css'
+import '@fortawesome/fontawesome-free/css/all.min.css';
 import Home from './component/Home'
 function App() {
   return (
