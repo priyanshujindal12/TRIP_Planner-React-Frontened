@@ -25,7 +25,7 @@ const Dashboard = () => {
     pendingBookings: 0,
   });
   const [activeFilter, setActiveFilter] = useState({ trips: 'all', bookings: 'all' });
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false); // 🆕 For mobile sidebar toggle
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false); 
 
 
   const API_BASE = 'https://trip-planner-backend-y5v9.onrender.com';
@@ -159,34 +159,56 @@ const Dashboard = () => {
     const form = e.target;
     const formData = new FormData(form);
     const tripData = Object.fromEntries(formData.entries());
+  
     // Validation
     if (!tripData.title || tripData.title.trim().length < 3) {
       showNotification('Please enter a trip title (at least 3 characters)', 'warning');
       return;
     }
-    const startDate = new Date(tripData.startDate);
-    const endDate = new Date(tripData.endDate);
+  
+    // ✅ Fix: Properly parse datetime-local as local time (not UTC)
+    const parseLocalDateTime = (value) => {
+      const [datePart, timePart] = value.split("T");
+      const [year, month, day] = datePart.split("-").map(Number);
+      const [hour, minute] = timePart.split(":").map(Number);
+      return new Date(year, month - 1, day, hour, minute);
+    };
+    
+    const startDate = parseLocalDateTime(tripData.startDate);
+    const endDate = parseLocalDateTime(tripData.endDate);
+    
+   
     const now = new Date();
-    if (startDate < now) {
+    now.setSeconds(0, 0);
+    
+    const bufferMs = 5 * 60 * 1000;
+    
+    if (startDate.getTime() < now.getTime() - bufferMs) {
       showNotification('Start date cannot be in the past!', 'error');
       return;
     }
+    
     if (endDate <= startDate) {
       showNotification('End date must be after start date!', 'error');
       return;
     }
+  
+    
     tripData.startDate = startDate.toISOString();
     tripData.endDate = endDate.toISOString();
     tripData.seats = parseInt(tripData.seats, 10);
     tripData.pricePerPerson = parseFloat(tripData.pricePerPerson);
+  
     try {
       const response = await fetchWithAuth(`${API_BASE}/trips/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(tripData),
       });
+  
       if (!response) return;
       const result = await response.json();
+  
       if (response.ok && result.success) {
         showNotification('Trip created successfully!', 'success');
         form.reset();
@@ -200,7 +222,7 @@ const Dashboard = () => {
       showNotification('Failed to create trip. Please try again.', 'error');
     }
   };
-
+  
  
   const handleJoinTrip = async (seatsBooked) => {
     try {
@@ -400,13 +422,11 @@ const Dashboard = () => {
     });
   };
 
-  // Get transport icon
   const getTransportIcon = (mode) => {
     const icons = { bus: 'fa-bus', railway: 'fa-train', airplane: 'fa-plane', car: 'fa-car' };
     return icons[mode] || 'fa-car';
   };
 
-  // Get booking status
   const getBookingStatus = (booking) => {
     if (booking.isCancelled) return 'cancelled';
     if (booking.isPast) return 'completed';
@@ -414,7 +434,7 @@ const Dashboard = () => {
     return 'unknown';
   };
 
-  // Initialize dashboard
+  
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -447,7 +467,7 @@ const Dashboard = () => {
     updateDashboardStats();
   }, [myTrips, myBookings, updateDashboardStats]);
 
-  // Get user display name
+  
   const getUserDisplayName = () => {
     if (!currentUser?.email) return 'Traveler';
     const username = currentUser.email.split('@')[0];

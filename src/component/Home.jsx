@@ -1,27 +1,41 @@
 import { useState, useEffect, useRef } from 'react';
-import{Link} from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+
 export default function Home() {
+  const [text, setText] = useState("");
+  const fullText = "Find your travel buddy — plan, join & explore together.";
+
+  useEffect(() => {
+    let index = 0;
+    let forward = true;
+    const interval = setInterval(() => {
+      if (forward) {
+        index++;
+        if (index === fullText.length) forward = false;
+      } else {
+        index--;
+        if (index === 0) forward = true;
+      }
+      setText(fullText.slice(0, index));
+    }, 80);
+    return () => clearInterval(interval);
+  }, []);
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
   const [navScrolled, setNavScrolled] = useState(false);
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
-  const [currentSlide, setCurrentSlide] = useState(0);
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [statsVisible, setStatsVisible] = useState(false);
   const [stats, setStats] = useState({ trips: 0, cities: 0, travelers: 0 });
-  
+
   const trackRef = useRef(null);
   const carouselRef = useRef(null);
   const autoSlideRef = useRef(null);
   const statsRef = useRef(null);
+  const canvasRef = useRef(null); // Particle background
 
-  const heroImages = [
-    'https://images.unsplash.com/photo-1519681393784-d120267933ba?q=80&w=1600&auto=format&fit=crop',
-    'https://images.unsplash.com/photo-1493558103817-58b2924bce98?q=80&w=1600&auto=format&fit=crop',
-    'https://images.unsplash.com/photo-1505761671935-60b3a7427bad?q=80&w=1600&auto=format&fit=crop',
-    'https://images.unsplash.com/photo-1512453979798-5ea266f8880c?q=80&w=1600&auto=format&fit=crop'
-  ];
+  const navigate = useNavigate();
 
   const destinations = [
     { name: 'Paris, France', img: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?q=80&w=1200&auto=format&fit=crop' },
@@ -60,7 +74,56 @@ export default function Home() {
     }
   ];
 
-  
+  // === PARTICLE CANVAS ===
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const resize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    resize();
+    window.addEventListener('resize', resize);
+
+    const particles = [];
+    const count = Math.min(120, Math.floor((canvas.width * canvas.height) / 12000));
+
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        vx: (Math.random() - 0.5) * 0.6,
+        vy: (Math.random() - 0.5) * 0.6,
+        radius: Math.random() * 1.8 + 0.8
+      });
+    }
+
+    let animId;
+    const animate = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      particles.forEach(p => {
+        p.x += p.vx;
+        p.y += p.vy;
+        if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
+        if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(139,92,246,0.45)';
+        ctx.fill();
+      });
+      animId = requestAnimationFrame(animate);
+    };
+    animate();
+
+    return () => {
+      cancelAnimationFrame(animId);
+      window.removeEventListener('resize', resize);
+    };
+  }, []);
+
+  // === SCROLL & NAV ===
   useEffect(() => {
     const handleScroll = () => {
       const h = document.documentElement;
@@ -69,13 +132,12 @@ export default function Home() {
       setNavScrolled(window.scrollY > 60);
       setShowBackToTop(window.scrollY > 500);
     };
-
     window.addEventListener('scroll', handleScroll, { passive: true });
     handleScroll();
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Cursor tracking
+  // === CURSOR GLOW ===
   useEffect(() => {
     const handleMouseMove = (e) => {
       setCursorPos({ x: e.clientX - 100, y: e.clientY - 100 });
@@ -84,27 +146,18 @@ export default function Home() {
     return () => window.removeEventListener('pointermove', handleMouseMove);
   }, []);
 
-  // Hero slideshow with smooth transitions
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % heroImages.length);
-    }, 5000); // Changed to 5 seconds for better pacing
-    return () => clearInterval(interval);
-  }, [heroImages.length]);
-
-  // Carousel auto-slide
+  // === CAROUSEL AUTO-SLIDE ===
   useEffect(() => {
     const startAutoSlide = () => {
       autoSlideRef.current = setInterval(() => {
         setCarouselIndex((prev) => prev + 1);
       }, 4000);
     };
-
     startAutoSlide();
     return () => clearInterval(autoSlideRef.current);
   }, []);
 
-  // Stats counter animation
+  // === STATS ANIMATION ===
   useEffect(() => {
     if (!statsVisible) return;
 
@@ -113,7 +166,6 @@ export default function Home() {
       const step = () => {
         const now = Date.now();
         const progress = Math.min((now - startTime) / duration, 1);
-        // Easing function for smooth animation
         const easeOutQuart = 1 - Math.pow(1 - progress, 4);
         const value = Math.floor(easeOutQuart * (end - start) + start);
         setStats((prev) => ({ ...prev, [key]: value }));
@@ -131,22 +183,16 @@ export default function Home() {
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setStatsVisible(true);
-          }
+          if (entry.isIntersecting) setStatsVisible(true);
         });
       },
       { threshold: 0.4 }
     );
-
-    if (statsRef.current) {
-      observer.observe(statsRef.current);
-    }
-
+    if (statsRef.current) observer.observe(statsRef.current);
     return () => observer.disconnect();
   }, []);
 
-  // Carousel transition handling
+  // === CAROUSEL INFINITE LOOP ===
   useEffect(() => {
     if (!trackRef.current) return;
     const currTrack = trackRef.current;
@@ -173,9 +219,7 @@ export default function Home() {
     clearInterval(autoSlideRef.current);
     setCarouselIndex((prev) => prev + 1);
     setTimeout(() => {
-      autoSlideRef.current = setInterval(() => {
-        setCarouselIndex((prev) => prev + 1);
-      }, 4000);
+      autoSlideRef.current = setInterval(() => setCarouselIndex((prev) => prev + 1), 4000);
     }, 600);
   };
 
@@ -183,41 +227,43 @@ export default function Home() {
     clearInterval(autoSlideRef.current);
     setCarouselIndex((prev) => prev - 1);
     setTimeout(() => {
-      autoSlideRef.current = setInterval(() => {
-        setCarouselIndex((prev) => prev + 1);
-      }, 4000);
+      autoSlideRef.current = setInterval(() => setCarouselIndex((prev) => prev + 1), 4000);
     }, 600);
   };
 
-  const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+  const scrollToSection = (id) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+    setMenuOpen(false);
   };
 
-  const scrollToSection = (id) => {
-    const element = document.getElementById(id);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth' });
-    }
-    setMenuOpen(false);
+  // === HANDLE EXPLORE SUBMIT → /login ===
+  const handleExploreSubmit = (e) => {
+    e.preventDefault();
+    navigate('/login');
   };
 
   return (
     <div className="min-h-screen bg-[#0f1220] text-white font-['Poppins',system-ui,sans-serif] overflow-x-hidden">
-      {/* Scroll Progress */}
+
+      {/* PARTICLE CANVAS */}
+      <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none z-0 opacity-60" />
+
+      {/* SCROLL PROGRESS */}
       <div
-        className="fixed top-0 left-0 h-1 z-1000 bg-linear-to-r from-violet-600 via-cyan-500 to-amber-500"
+        className="fixed top-0 left-0 h-1 z-[1000] bg-gradient-to-r from-violet-600 via-cyan-500 to-amber-500"
         style={{ width: `${scrollProgress}%` }}
       />
 
-    
-      <nav className={`fixed top-0 left-0 w-full flex items-center justify-between gap-3 px-[4vw] py-3.5 z-900 transition-all duration-300 ${navScrolled ? 'backdrop-blur-xl bg-[rgba(10,12,22,0.55)] shadow-[0_10px_30px_rgba(0,0,0,0.35)]' : ''}`}>
+      {/* NAV */}
+      <nav className={`fixed top-0 left-0 w-full flex items-center justify-between gap-3 px-[4vw] py-3.5 z-[900] transition-all duration-300 ${navScrolled ? 'backdrop-blur-xl bg-[rgba(10,12,22,0.55)] shadow-[0_10px_30px_rgba(0,0,0,0.35)]' : ''}`}>
         <div className="flex items-center gap-3 font-extrabold tracking-wide">
-          <div className="text-3xl w-9 h-9 grid place-items-center rounded-xl bg-linear-to-br from-violet-600 to-cyan-500 shadow-[0_6px_16px_rgba(124,58,237,0.45)]">
-            ✈
+          <div className="text-3xl w-9 h-9 grid place-items-center rounded-xl bg-gradient-to-br from-violet-600 to-cyan-500 shadow-[0_6px_16px_rgba(124,58,237,0.45)]">
+          ✈
           </div>
           Ghumakkad
         </div>
-        
+
         <ul className="hidden lg:flex list-none gap-5 m-0 p-0">
           <li><a onClick={() => scrollToSection('home')} className="opacity-90 font-medium hover:opacity-100 hover:underline cursor-pointer">Home</a></li>
           <li><a onClick={() => scrollToSection('highlights')} className="opacity-90 font-medium hover:opacity-100 hover:underline cursor-pointer">How it Works</a></li>
@@ -225,17 +271,17 @@ export default function Home() {
           <li><a onClick={() => scrollToSection('destinations')} className="opacity-90 font-medium hover:opacity-100 hover:underline cursor-pointer">Destinations</a></li>
           <li><a onClick={() => scrollToSection('reviews')} className="opacity-90 font-medium hover:opacity-100 hover:underline cursor-pointer">Reviews</a></li>
           <li><Link to='/contact' className="opacity-90 font-medium hover:opacity-100 hover:underline cursor-pointer">Contact</Link></li>
-          <li><Link to='/login' className="px-4 py-2.5 rounded-full bg-blueviolet text-white shadow-[0_10px_24px_rgba(124,58,237,0.35)] hover:scale-105 transition-transform">Join a Trip</Link></li>
+          <li><Link to='/login' className="px-4 py-2.5 rounded-full bg-violet-600 text-white  hover:scale-105 transition-transform">Join a Trip</Link></li>
         </ul>
 
         <div className="lg:hidden cursor-pointer bg-[rgba(255,255,255,0.06)] px-3.5 py-2.5 rounded-xl text-xl" onClick={() => setMenuOpen(!menuOpen)}>
-          ☰
+          Menu
         </div>
       </nav>
 
-    
+      {/* MOBILE MENU */}
       {menuOpen && (
-        <div className="fixed right-4 top-[70px] bg-[rgba(20,22,34,0.9)] backdrop-blur-xl border border-[rgba(255,255,255,0.08)] p-4 rounded-2xl z-900">
+        <div className="fixed right-4 top-[70px] bg-[rgba(20,22,34,0.9)] backdrop-blur-xl border border-[rgba(255,255,255,0.08)] p-4 rounded-2xl z-[900]">
           <a onClick={() => scrollToSection('home')} className="block py-2.5 px-2 rounded-lg hover:bg-[rgba(255,255,255,0.08)] cursor-pointer">Home</a>
           <a onClick={() => scrollToSection('highlights')} className="block py-2.5 px-2 rounded-lg hover:bg-[rgba(255,255,255,0.08)] cursor-pointer">How it Works</a>
           <a onClick={() => scrollToSection('mosaic')} className="block py-2.5 px-2 rounded-lg hover:bg-[rgba(255,255,255,0.08)] cursor-pointer">Gallery</a>
@@ -246,39 +292,67 @@ export default function Home() {
         </div>
       )}
 
-  
-      <header id="home" className="min-h-screen relative flex items-center px-[6vw] pt-[18vh] pb-[10vh] overflow-hidden">
-        <div className="absolute inset-0 z-0">
-          {heroImages.map((img, idx) => (
-            <div
-              key={idx}
-              className="absolute inset-0 bg-cover bg-center hero-slide"
-              style={{
-                backgroundImage: `url(${img})`,
-                opacity: currentSlide === idx ? 1 : 0,
-                transition: 'opacity 2s ease-in-out',
-                transform: currentSlide === idx ? 'scale(1.1)' : 'scale(1.05)'
-              }}
-            />
-          ))}
-          
-          <div className="absolute inset-0 bg-black/30 z-1"></div>
-        </div>
-        
-        <div className="relative z-10 max-w-[50%] lg:max-w-[50%] md:max-w-full p-6">
-          <h1 className="text-4xl md:text-5xl lg:text-6xl leading-tight m-0 text-white [text-shadow:2px_2px_8px_rgba(0,0,0,0.7)]">
-            Find your travel buddy — plan, join & explore together.
-          </h1>
-          <p className="text-white [text-shadow:2px_2px_6px_rgba(0,0,0,0.7)] my-4 max-w-[60ch]">
-            With Ghumakkad you can plan your trip, invite fellow travelers, or join someone else's adventure. A community of explorers, traveling smarter and safer — together.
+      {/* === HERO WITH DATE PICKER + LOGIN REDIRECT === */}
+      <header id="home" className="relative min-h-screen flex items-center justify-center overflow-hidden">
+        <div className="relative z-10 text-center px-6 max-w-5xl mx-auto">
+          {/* Main heading */}
+          <h1
+  className="text-4xl md:text-5xl lg:text-6xl  leading-tight font-black mb-4 animate-fadeInUp
+    bg-gradient-to-r from-cyan-400 via-violet-500 to-pink-500 bg-clip-text text-transparent
+    bg-[length:200%_200%] animate-gradient"
+  style={{
+    backgroundSize: '200% 200%',
+    animation: 'gradient 6s ease infinite'
+  }}
+>
+ {text}
+ <span className="text-4xl md:text-5xl lg:text-6xl  leading-tight font-black mb-4 animate-fadeInUp
+    bg-gradient-to-r from-cyan-400 via-violet-500 to-pink-500 bg-clip-text text-transparent
+    bg-[length:200%_200%] animate-gradient">|</span>
+</h1>
+          {/* Sub-text */}
+          <p className="text-2xl  text-white [text-shadow:2px_2px_6px_rgba(0,0,0,0.7)] my-4 max-w-[60ch] mx-auto">
+            With Ghumakkad you can plan your trip, invite fellow travelers, or join someone else's adventure.
           </p>
-          <a
-            href="#"
-            className="inline-flex items-center gap-2.5 px-5 py-3.5 rounded-2xl border border-[rgba(255,255,255,0.12)] bg-linear-to-br from-[#d0f0ff] via-[#4db5e7] to-[#1fa2ff] text-white shadow-[0_10px_30px_rgba(0,0,0,0.35)] hover:translate-y-[-2px] hover:saturate-120 transition-all duration-250"
+
+          {/* ==== DATE PICKER FORM ==== */}
+          <form
+            onSubmit={handleExploreSubmit}
+            className="mt-8 flex flex-col sm:flex-row gap-3 items-center justify-center max-w-2xl mx-auto"
           >
-            Explore Trips →
-          </a>
-          <div className="mt-4 flex flex-wrap gap-2.5">
+            {/* FROM DATE */}
+            <div className="relative flex-1 w-full sm:w-auto">
+              <label htmlFor="from" className="sr-only">From</label>
+              <input
+                type="date"
+                id="from"
+                required
+                className="w-full px-5 py-3.5 rounded-xl bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.12)] text-white placeholder-[#a9b1c3] focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
+              />
+            </div>
+
+            {/* TO DATE */}
+            <div className="relative flex-1 w-full sm:w-auto">
+              <label htmlFor="to" className="sr-only">To</label>
+              <input
+                type="date"
+                id="to"
+                required
+                className="w-full px-5 py-3.5 rounded-xl bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.12)] text-white placeholder-[#a9b1c3] focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
+              />
+            </div>
+
+            {/* EXPLORE BUTTON → /login */}
+            <button
+              type="submit"
+              className="px-8 py-3.5 rounded-xl bg-gradient-to-br from-[#d0f0ff] via-[#4db5e7] to-[#1fa2ff] text-white font-semibold shadow-[0_10px_30px_rgba(0,0,0,0.35)] hover:translate-y-[-2px] hover:saturate-120 transition-all duration-250"
+            >
+              Explore Trips
+            </button>
+          </form>
+
+          {/* Tags */}
+          <div className="mt-6 flex flex-wrap justify-center gap-2.5">
             <span className="px-3 py-2 rounded-full bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.12)] text-sm text-[#e6f7ff]">Plan Your Trip</span>
             <span className="px-3 py-2 rounded-full bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.12)] text-sm text-[#e6f7ff]">Join a Community</span>
             <span className="px-3 py-2 rounded-full bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.12)] text-sm text-[#e6f7ff]">Travel Together</span>
@@ -286,14 +360,14 @@ export default function Home() {
         </div>
       </header>
 
-   
+      {/* === HOW IT WORKS === */}
       <section id="highlights" className="py-[8vh] px-[6vw]">
         <h2 className="text-3xl lg:text-4xl mb-5">How Ghumakkad Works</h2>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           {[
-            { icon: '🗺', title: 'Plan a Trip', desc: 'Create itineraries, choose dates, and invite buddies.', more: 'You can customize destinations, share with friends, and get suggestions tailored for your travel style.' },
+            { icon: '🗺️', title: 'Plan a Trip', desc: 'Create itineraries, choose dates, and invite buddies.', more: 'You can customize destinations, share with friends, and get suggestions tailored for your travel style.' },
             { icon: '🤝', title: 'Join a Trip', desc: 'Browse trips planned by others and join the adventure.', more: 'Filter by location, duration, or group type to find the perfect journey with like-minded explorers.' },
-            { icon: '🌍', title: 'Community First', desc: 'Verified travelers, safe groups, and real connections.', more: 'Engage in forums, share reviews, and build long-term friendships through authentic travel experiences.' }
+            { icon: '🌟', title: 'Community First', desc: 'Verified travelers, safe groups, and real connections.', more: 'Engage in forums, share reviews, and build long-term friendships through authentic travel experiences.' }
           ].map((item, idx) => (
             <div key={idx} className="group bg-[rgba(255,255,255,0.06)] border border-[rgba(255,255,255,0.1)] rounded-[22px] p-5 shadow-[0_10px_30px_rgba(0,0,0,0.35)] backdrop-blur-xl transition-all duration-250 hover:translate-y-[-6px] hover:shadow-[0_18px_36px_rgba(0,0,0,0.35)] overflow-hidden max-h-[220px] hover:max-h-[400px]">
               <div className="text-2xl w-10 h-10 grid place-items-center rounded-xl bg-violet-600 mb-3">{item.icon}</div>
@@ -307,7 +381,7 @@ export default function Home() {
         </div>
       </section>
 
-     
+      {/* === GALLERY === */}
       <section id="mosaic" className="py-[8vh] px-[6vw]">
         <h2 className="text-3xl lg:text-4xl mb-5">Aesthetic Moments from the Road</h2>
         <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr_1fr] gap-4">
@@ -326,7 +400,7 @@ export default function Home() {
         </div>
       </section>
 
- 
+      {/* === DESTINATIONS CAROUSEL === */}
       <section id="destinations" className="py-[8vh] px-[6vw]">
         <h2 className="text-3xl lg:text-4xl mb-5">Popular Destinations</h2>
         <div className="relative overflow-hidden" ref={carouselRef}>
@@ -344,29 +418,20 @@ export default function Home() {
                 <div className="absolute inset-0 flex flex-col items-center justify-center p-5 text-center opacity-0 translate-y-5 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-600">
                   <h3 className="text-2xl font-semibold mb-2.5">{dest.name}</h3>
                   <p className="text-[#a9b1c3] mb-3.5">From ₹29,999 • 6D/5N</p>
-                  <button className="px-4 py-2.5 rounded-full bg-linear-to-br from-cyan-500 to-violet-600 text-white cursor-pointer hover:scale-110 transition-transform duration-250">
+                  {/* eslint-disable-next-line */}
+                  <button className="px-4 py-2.5 rounded-full bg-gradient-to-br from-cyan-500 to-violet-600 text-white cursor-pointer hover:scale-110 transition-transform duration-250">
                     Join Trip
                   </button>
                 </div>
               </div>
             ))}
           </div>
-          <button
-            onClick={handleCarouselPrev}
-            className="absolute top-1/2 left-2.5 -translate-y-1/2 bg-[rgba(0,0,0,0.4)] border-none rounded-full w-10 h-10 text-white text-xl cursor-pointer z-10 hover:bg-[rgba(0,0,0,0.6)] transition-colors duration-250"
-          >
-            ◀
-          </button>
-          <button
-            onClick={handleCarouselNext}
-            className="absolute top-1/2 right-2.5 -translate-y-1/2 bg-[rgba(0,0,0,0.4)] border-none rounded-full w-10 h-10 text-white text-xl cursor-pointer z-10 hover:bg-[rgba(0,0,0,0.6)] transition-colors duration-250"
-          >
-            ▶
-          </button>
+          <button onClick={handleCarouselPrev} className="absolute top-1/2 left-2.5 -translate-y-1/2 bg-[rgba(0,0,0,0.4)] border-none rounded-full w-10 h-10 text-white text-xl cursor-pointer z-10 hover:bg-[rgba(0,0,0,0.6)] transition-colors duration-250">Left</button>
+          <button onClick={handleCarouselNext} className="absolute top-1/2 right-2.5 -translate-y-1/2 bg-[rgba(0,0,0,0.4)] border-none rounded-full w-10 h-10 text-white text-xl cursor-pointer z-10 hover:bg-[rgba(0,0,0,0.6)] transition-colors duration-250">Right</button>
         </div>
       </section>
 
-     \
+      {/* === STATS === */}
       <section className="py-[8vh] px-[6vw]" ref={statsRef}>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-[rgba(255,255,255,0.06)] border border-[rgba(255,255,255,0.08)] p-5 rounded-2xl text-center">
@@ -383,12 +448,12 @@ export default function Home() {
           </div>
           <div className="bg-[rgba(255,255,255,0.06)] border border-[rgba(255,255,255,0.08)] p-5 rounded-2xl text-center">
             <span className="text-[#a9b1c3]">Avg. Rating</span>
-            <h3 className="text-3xl font-bold my-1.5">4.9★</h3>
+            <h3 className="text-3xl font-bold my-1.5">4.9 Stars</h3>
           </div>
         </div>
       </section>
 
-      {/* Testimonials */}
+      {/* === TESTIMONIALS === */}
       <section id="reviews" className="py-[8vh] px-[6vw]">
         <h2 className="text-3xl lg:text-4xl mb-5">Loved by explorers everywhere</h2>
         <div className="flex gap-4 overflow-x-auto no-scrollbar">
@@ -396,7 +461,8 @@ export default function Home() {
             <article key={idx} className="min-w-[360px] bg-[rgba(255,255,255,0.06)] border border-[rgba(255,255,255,0.08)] rounded-2xl p-4">
               <img src={t.img} alt={t.country} className="w-full h-[120px] object-cover rounded-xl border border-[rgba(255,255,255,0.12)] mb-3" loading="lazy" />
               <div className="flex items-center gap-3 mb-2.5">
-                <div className="w-10 h-10 rounded-full bg-linear-to-br from-green-500 to-cyan-500"></div>
+                {/* eslint-disable-next-line */}
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-500 to-cyan-500"></div>
                 <strong>{t.name}</strong>
               </div>
               <p className="text-[#a9b1c3] leading-relaxed">{t.text}</p>
@@ -405,24 +471,24 @@ export default function Home() {
         </div>
       </section>
 
-   
+      {/* === JOIN CTA === */}
       <section id="join" className="py-[8vh] px-[6vw] text-center">
-        <Link to='/login' className="inline-flex items-center gap-2.5 px-7 py-4 rounded-2xl text-lg bg-blueviolet text-white shadow-[0_10px_30px_rgba(0,0,0,0.35)] hover:translate-y-[-2px] hover:saturate-120 transition-all duration-250">
-          Explore Now →
+        <Link to='/login' className="inline-flex items-center gap-2.5  px-7 py-4 rounded-2xl text-lg bg-violet-600 text-white shadow-[0_10px_30px_rgba(0,0,0,0.35)] hover:translate-y-[-2px] hover:saturate-120 transition-all duration-250">
+          Explore Now
         </Link>
       </section>
 
-   
+      {/* === FOOTER === */}
       <footer className="py-[10vh] px-[6vw] border-t border-[rgba(255,255,255,0.06)] bg-[rgba(0,0,0,0.35)]">
         <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr_1fr] gap-6">
           <div>
             <h4 className="mb-2.5 text-lg font-semibold">Ghumakkad</h4>
             <p className="text-[#a9b1c3]">We help you explore the world with style, safety, and a community that feels like friends.</p>
             <div className="flex gap-3 mt-3">
-              <a href="#" className="text-xl text-[#a9b1c3] hover:text-cyan-500 transition-colors">📘</a>
-              <a href="#" className="text-xl text-[#a9b1c3] hover:text-cyan-500 transition-colors">🐦</a>
-              <a href="#" className="text-xl text-[#a9b1c3] hover:text-cyan-500 transition-colors">📷</a>
-              <a href="#" className="text-xl text-[#a9b1c3] hover:text-cyan-500 transition-colors">💼</a>
+              <a href="#" className="text-xl text-[#a9b1c3] hover:text-cyan-500 transition-colors">Facebook</a>
+              <a href="#" className="text-xl text-[#a9b1c3] hover:text-cyan-500 transition-colors">Twitter</a>
+              <a href="#" className="text-xl text-[#a9b1c3] hover:text-cyan-500 transition-colors">Instagram</a>
+              <a href="#" className="text-xl text-[#a9b1c3] hover:text-cyan-500 transition-colors">LinkedIn</a>
             </div>
           </div>
           <div>
@@ -441,16 +507,17 @@ export default function Home() {
         <p className="text-[#a9b1c3] mt-4">© 2025 Ghumakkad. All rights reserved.</p>
       </footer>
 
+      {/* BACK TO TOP */}
       {showBackToTop && (
         <div
           onClick={scrollToTop}
-          className="fixed right-4 bottom-4 w-11 h-11 rounded-full grid place-items-center bg-linear-to-br from-violet-600 to-cyan-500 text-white shadow-[0_10px_30px_rgba(0,0,0,0.35)] cursor-pointer z-800 animate-fadeInUp"
+          className="fixed right-4 bottom-4 w-11 h-11 rounded-full grid place-items-center bg-gradient-to-br from-violet-600 to-cyan-500 text-white shadow-[0_10px_30px_rgba(0,0,0,0.35)] cursor-pointer z-[800] animate-fadeInUp"
         >
-          ↑
+          Up
         </div>
       )}
 
-  
+      {/* CURSOR GLOW */}
       <div
         className="fixed w-[200px] h-[200px] rounded-full pointer-events-none mix-blend-screen z-0"
         style={{
@@ -459,43 +526,16 @@ export default function Home() {
         }}
       />
 
+      {/* ANIMATIONS */}
       <style jsx>{`
-        @keyframes heroZoom {
-          0% { 
-            transform: scale(1.05);
-          }
-          100% { 
-            transform: scale(1.15);
-          }
-        }
-        
-        .hero-slide {
-          animation: heroZoom 15s ease-in-out infinite alternate;
-        }
-        
+      
         @keyframes fadeInUp {
-          from {
-            opacity: 0;
-            transform: translateY(12px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+          from { opacity: 0; transform: translateY(12px); }
+          to { opacity: 1; transform: translateY(0); }
         }
-        
-        .animate-fadeInUp {
-          animation: fadeInUp 0.25s ease-out;
-        }
-        
-        .no-scrollbar::-webkit-scrollbar {
-          display: none;
-        }
-        
-        .no-scrollbar {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
+        .animate-fadeInUp { animation: fadeInUp 0.6s ease-out; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
     </div>
   );

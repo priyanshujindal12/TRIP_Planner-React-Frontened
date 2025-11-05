@@ -1,5 +1,14 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+const decodeToken = (token) => {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload;
+  } catch (err) {
+    console.error("Invalid token:", err);
+    return null;
+  }
+};
 
 const Login = () => {
   const navigate = useNavigate();
@@ -98,22 +107,29 @@ const Login = () => {
     setIsLoginLoading(true);
 
     try {
-      const res = await fetch("https://trip-planner-backend-y5v9.onrender.com/user/signin", {
+      const res = await fetch("http://localhost:3000/user/signin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(loginData)
       });
       const result = await res.json();
 
-      if (res.ok && result.token) {
-        localStorage.setItem("token", result.token);
-        localStorage.setItem("userEmail", loginData.email);
-        displayMessage('Login successful! Redirecting...', 'success');
-        setTimeout(() => navigate('/dashboard'), 1000);
-      } else {
-        displayMessage(result.msg || 'Login failed. Please check your credentials.', 'error');
-      }
-    } catch (error) {
+     if (res.ok && result.token) {
+  localStorage.setItem("token", result.token);
+  localStorage.setItem("userEmail", loginData.email);
+
+  const decoded = decodeToken(result.token);
+  if (decoded?.isAdmin) {
+    displayMessage('Welcome Admin! Redirecting to portal...', 'success');
+    const decoded = decodeToken(result.token);
+    console.log("Decoded token:", decoded);
+
+    setTimeout(() => navigate('/admin-dashboard'), 1000);
+  } else {
+    displayMessage('Login successful! Redirecting...', 'success');
+    setTimeout(() => navigate('/dashboard'), 1000);
+  }
+}}catch (error) {
       console.error('Login error:', error);
       displayMessage('Network error. Please try again.', 'error');
     } finally {
