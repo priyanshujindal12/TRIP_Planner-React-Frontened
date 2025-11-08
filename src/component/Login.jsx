@@ -93,7 +93,7 @@ const Login = () => {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    
+  
     const emailErrors = validateEmail(loginData.email);
     const passwordErrors = validatePassword(loginData.password);
     
@@ -103,39 +103,51 @@ const Login = () => {
       displayMessage('Please fix the validation errors above', 'error');
       return;
     }
-
+  
     setIsLoginLoading(true);
-
+  
     try {
-      const res = await fetch("http://localhost:3000/user/signin", {
+      const res = await fetch("https://trip-planner-backend-y5v9.onrender.com/user/signin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(loginData)
       });
+  
       const result = await res.json();
-
-     if (res.ok && result.token) {
-  localStorage.setItem("token", result.token);
-  localStorage.setItem("userEmail", loginData.email);
-
-  const decoded = decodeToken(result.token);
-  if (decoded?.isAdmin) {
-    displayMessage('Welcome Admin! Redirecting to portal...', 'success');
-    const decoded = decodeToken(result.token);
-    console.log("Decoded token:", decoded);
-
-    setTimeout(() => navigate('/admin-dashboard'), 1000);
-  } else {
-    displayMessage('Login successful! Redirecting...', 'success');
-    setTimeout(() => navigate('/dashboard'), 1000);
-  }
-}}catch (error) {
+  
+      // ✅ Handle errors properly
+      if (!res.ok) {
+        displayMessage(result.msg || 'Invalid credentials. Please try again.', 'error');
+        return;
+      }
+  
+      // ✅ Handle success
+      if (result.token) {
+        localStorage.setItem("token", result.token);
+        localStorage.setItem("userEmail", loginData.email);
+  
+        const decoded = decodeToken(result.token);
+        console.log("Decoded token:", decoded);
+  
+        if (decoded?.isAdmin) {
+          displayMessage('Welcome Admin! Redirecting to portal...', 'success');
+          setTimeout(() => navigate('/admin-dashboard'), 1000);
+        } else {
+          displayMessage('Login successful! Redirecting...', 'success');
+          setTimeout(() => navigate('/dashboard'), 1000);
+        }
+      } else {
+        displayMessage('Unexpected error. Please try again.', 'error');
+      }
+  
+    } catch (error) {
       console.error('Login error:', error);
-      displayMessage('Network error. Please try again.', 'error');
+      displayMessage('Network error. Please try again later.', 'error');
     } finally {
       setIsLoginLoading(false);
     }
   };
+  
 
 
   const handleSignup = async (e) => {
@@ -171,7 +183,7 @@ const Login = () => {
       }
     } catch (error) {
       console.error('Signup error:', error);
-      displayMessage('Network error. Please try again.', 'error');
+      displayMessage('Network error. Please try again.', error);
     } finally {
       setIsSignupLoading(false);
     }
