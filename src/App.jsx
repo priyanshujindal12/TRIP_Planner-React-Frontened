@@ -9,6 +9,7 @@ import Admin from './component/Admin'
 function App() {
   return (
     <>
+        
         <Router>
           <Routes>
             <Route path='/' element={<Home />} />
