@@ -1,11 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react';
+// Dashboard.jsx
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '@fortawesome/fontawesome-free/css/all.min.css';
+
+
 
 const Dashboard = () => {
   const navigate = useNavigate();
 
- 
+  /* ===================== STATE ===================== */
   const [currentUser, setCurrentUser] = useState(null);
   const [currentTab, setCurrentTab] = useState('overview');
   const [myTrips, setMyTrips] = useState([]);
@@ -25,14 +28,38 @@ const Dashboard = () => {
     pendingBookings: 0,
   });
   const [activeFilter, setActiveFilter] = useState({ trips: 'all', bookings: 'all' });
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false); 
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
+  // track flipped cards for "View" flip
+  const [flipped, setFlipped] = useState(() => new Set());
 
-  const API_BASE = 'https://trip-planner-backend-y5v9.onrender.com';
+  const API_BASE = 'https://trip-planner-backend-y5v9.onrender.com'; // adjust to your API base if different
 
+  /* ===================== HELPERS ===================== */
+
+  const decodeToken = useCallback(() => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return null;
+      const parts = token.split('.');
+      if (parts.length < 2) return null;
+      const payload = parts[1];
+      const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+      const json = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      return JSON.parse(json);
+    } catch (e) {
+      return null;
+    }
+  }, []);
 
   const validateToken = useCallback(
     (response) => {
+      if (!response) return false;
       if (response.status === 401 || response.status === 403) {
         localStorage.removeItem('token');
         localStorage.removeItem('userEmail');
@@ -44,16 +71,14 @@ const Dashboard = () => {
     [navigate]
   );
 
-
   const showNotification = useCallback((message, type = 'info') => {
-    const id = Date.now();
+    const id = Date.now() + Math.floor(Math.random() * 1000);
     setNotifications((prev) => [...prev, { id, message, type }]);
     setTimeout(() => {
       setNotifications((prev) => prev.filter((n) => n.id !== id));
     }, 5000);
   }, []);
 
-  // Fetch with auth
   const fetchWithAuth = useCallback(
     async (url, options = {}) => {
       const token = localStorage.getItem('token');
@@ -61,154 +86,132 @@ const Dashboard = () => {
         navigate('/login');
         return null;
       }
-      const response = await fetch(url, {
-        ...options,
-        headers: {
-          ...options.headers,
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (!validateToken(response)) return null;
-      return response;
+      try {
+        const response = await fetch(url, {
+          ...options,
+          headers: {
+            ...(options.headers || {}),
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (!validateToken(response)) return null;
+        return response;
+      } catch (err) {
+        console.error('fetchWithAuth error', err);
+        throw err;
+      }
     },
     [navigate, validateToken]
   );
 
-  // Load user data
+  /* ===================== DATA LOADERS ===================== */
+
   const loadUserData = useCallback(async () => {
     try {
-      const response = await fetchWithAuth(`${API_BASE}/user/dashboard-data`);
-      if (!response) return;
-      if (response.ok) {
-        const data = await response.json();
-        setCurrentUser(data);
-        localStorage.setItem('userEmail', data.email);
+      const decoded = decodeToken();
+      if (decoded && (decoded.id || decoded.email || decoded._id)) {
+        setCurrentUser({ _id: decoded.id || decoded._id || decoded.userId, email: decoded.email });
+        if (decoded.email) localStorage.setItem('userEmail', decoded.email);
+        return;
       }
-    } catch (error) {
-      console.error('Error loading user data:', error);
-      if (!localStorage.getItem('token')) {
-        navigate('/login');
+      const resp = await fetchWithAuth(`${API_BASE}/user/dashboard-data`);
+      if (!resp) return;
+      if (resp.ok) {
+        const data = await resp.json();
+        setCurrentUser({ _id: data._id || data.id || data.user?._id, email: data.email || data.user?.email });
+        if (data.email) localStorage.setItem('userEmail', data.email);
       }
+    } catch (err) {
+      console.error('loadUserData error', err);
     }
-  }, [fetchWithAuth, navigate]);
+  }, [API_BASE, decodeToken, fetchWithAuth]);
 
-  // Load dashboard data
-  const loadDashboardData = useCallback(async () => {
+  const loadMyTrips = useCallback(async () => {
     try {
-      const [tripsResponse, bookingsResponse] = await Promise.all([
-        fetchWithAuth(`${API_BASE}/trips/my-trips`),
-        fetchWithAuth(`${API_BASE}/trips/my-booking`),
-      ]);
-      if (!tripsResponse || !bookingsResponse) return;
-      if (tripsResponse.ok) {
-        const tripsData = await tripsResponse.json();
-        setMyTrips(tripsData.trips || []);
+      const resp = await fetchWithAuth(`${API_BASE}/trips/my-trips`);
+      if (!resp) return;
+      if (resp.ok) {
+        const data = await resp.json();
+        setMyTrips(data.trips || []);
       }
-      if (bookingsResponse.ok) {
-        const bookingsData = await bookingsResponse.json();
-        setMyBookings(bookingsData.bookings || []);
-      }
-      updateDashboardStats();
-      await loadAvailableTrips();
-    } catch (error) {
-      console.error('Error loading dashboard data:', error);
-      if (!localStorage.getItem('token')) {
-        navigate('/login');
-      }
+    } catch (err) {
+      console.error('loadMyTrips error', err);
     }
-  }, [fetchWithAuth, navigate]);
+  }, [API_BASE, fetchWithAuth]);
 
-  // Update dashboard statistics
+  const loadMyBookings = useCallback(async () => {
+    try {
+      const resp = await fetchWithAuth(`${API_BASE}/trips/my-booking`);
+      if (!resp) return;
+      if (resp.ok) {
+        const data = await resp.json();
+        setMyBookings(data.bookings || []);
+      }
+    } catch (err) {
+      console.error('loadMyBookings error', err);
+    }
+  }, [API_BASE, fetchWithAuth]);
+
+  const loadAvailableTrips = useCallback(async () => {
+    try {
+      const resp = await fetchWithAuth(`${API_BASE}/trips/all`);
+      if (!resp) return;
+      if (resp.ok) {
+        const data = await resp.json();
+        setAvailableTrips(data.trips || []);
+      }
+    } catch (err) {
+      console.error('loadAvailableTrips error', err);
+    }
+  }, [API_BASE, fetchWithAuth]);
+
+  const loadDashboardData = useCallback(async () => {
+    await Promise.all([loadMyTrips(), loadMyBookings(), loadAvailableTrips()]);
+  }, [loadMyTrips, loadMyBookings, loadAvailableTrips]);
+
   const updateDashboardStats = useCallback(() => {
     const totalTrips = myTrips.length;
-    const upcomingTrips = myTrips.filter((trip) => trip.status === 'upcoming').length;
+    const upcomingTrips = myTrips.filter((t) => t.status === 'upcoming').length;
     const totalBookings = myBookings.length;
-    const pendingBookings = myBookings.filter(
-      (booking) =>
-        booking.status === 'pending' ||
-        (booking.bookings && booking.bookings.some((b) => b.status === 'pending'))
-    ).length;
+    const pendingBookings =
+      myBookings.filter((b) => b.status === 'pending').length +
+      myTrips.reduce((acc, t) => acc + (Array.isArray(t.bookings) ? t.bookings.filter((b) => b.status === 'pending').length : 0), 0);
+
     setDashboardStats({ totalTrips, totalBookings, upcomingTrips, pendingBookings });
   }, [myTrips, myBookings]);
 
-  // Load available trips
-  const loadAvailableTrips = useCallback(async () => {
-    try {
-      const response = await fetchWithAuth(`${API_BASE}/trips/all`);
-      if (!response) return;
-      if (response.ok) {
-        const data = await response.json();
-        setAvailableTrips(data.trips || []);
-      }
-    } catch (error) {
-      console.error('Error loading available trips:', error);
-    }
-  }, [fetchWithAuth]);
-
-  // Handle logout
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('userEmail');
-    showNotification('Successfully logged out!', 'success');
-    setTimeout(() => navigate('/login'), 1000);
-  };
-
-  // Handle trip creation
+  /* ===================== TRIP CREATION ===================== */
   const handleTripCreation = async (e) => {
     e.preventDefault();
     const form = e.target;
     const formData = new FormData(form);
     const tripData = Object.fromEntries(formData.entries());
-  
-    // Validation
+
     if (!tripData.title || tripData.title.trim().length < 3) {
-      showNotification('Please enter a trip title (at least 3 characters)', 'warning');
+      showNotification('Please enter a trip title (min 3 chars)', 'warning');
       return;
     }
-  
-    // ✅ Fix: Properly parse datetime-local as local time (not UTC)
+
     const parseLocalDateTime = (value) => {
-      const [datePart, timePart] = value.split("T");
-      const [year, month, day] = datePart.split("-").map(Number);
-      const [hour, minute] = timePart.split(":").map(Number);
-      return new Date(year, month - 1, day, hour, minute);
+      const [datePart, timePart] = value.split('T');
+      const [year, month, day] = datePart.split('-').map(Number);
+      const [hour, minute] = timePart.split(':').map(Number);
+      return new Date(year, month - 1, day, hour, minute).toISOString();
     };
-    
-    const startDate = parseLocalDateTime(tripData.startDate);
-    const endDate = parseLocalDateTime(tripData.endDate);
-    
-   
-    const now = new Date();
-    now.setSeconds(0, 0);
-    
-    const bufferMs = 5 * 60 * 1000;
-    
-    if (startDate.getTime() < now.getTime() - bufferMs) {
-      showNotification('Start date cannot be in the past!', 'error');
-      return;
-    }
-    
-    if (endDate <= startDate) {
-      showNotification('End date must be after start date!', 'error');
-      return;
-    }
-  
-    
-    tripData.startDate = startDate.toISOString();
-    tripData.endDate = endDate.toISOString();
-    tripData.seats = parseInt(tripData.seats, 10);
-    tripData.pricePerPerson = parseFloat(tripData.pricePerPerson);
-  
+
     try {
+      tripData.startDate = parseLocalDateTime(tripData.startDate);
+      tripData.endDate = parseLocalDateTime(tripData.endDate);
+      tripData.seats = parseInt(tripData.seats, 10);
+      tripData.pricePerPerson = parseFloat(tripData.pricePerPerson);
+
       const response = await fetchWithAuth(`${API_BASE}/trips/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(tripData),
       });
-  
       if (!response) return;
       const result = await response.json();
-  
       if (response.ok && result.success) {
         showNotification('Trip created successfully!', 'success');
         form.reset();
@@ -218,37 +221,76 @@ const Dashboard = () => {
         showNotification(result.message || 'Failed to create trip', 'error');
       }
     } catch (error) {
-      console.error('Error creating trip:', error);
-      showNotification('Failed to create trip. Please try again.', 'error');
+      console.error('handleTripCreation error:', error);
+      showNotification('Failed to create trip', 'error');
     }
   };
-  
- 
+
+  /* ===================== PAYMENT & JOIN ===================== */
   const handleJoinTrip = async (seatsBooked) => {
     try {
-      const response = await fetchWithAuth(`${API_BASE}/trips/${selectedTripId}/join`, {
+      if (!selectedTripId) {
+        showNotification('No trip selected', 'warning');
+        return;
+      }
+      const orderResponse = await fetchWithAuth(`${API_BASE}/payment/create-order/${selectedTripId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ seatsBooked: parseInt(seatsBooked) }),
+        body: JSON.stringify({ seatsBooked: parseInt(seatsBooked, 10) }),
       });
-      if (!response) return;
-      if (response.ok) {
-        showNotification('Successfully joined trip!', 'success');
-        setShowJoinModal(false);
-        await loadDashboardData();
-        await loadAvailableTrips();
-        setCurrentTab('bookings');
-      } else {
-        const error = await response.json();
-        showNotification(error.message || 'Failed to join trip', 'error');
+      if (!orderResponse) return;
+      if (!orderResponse.ok) {
+        const err = await orderResponse.json().catch(() => null);
+        showNotification(err?.message || 'Failed to initiate payment', 'error');
+        return;
       }
+      const orderData = await orderResponse.json();
+
+      const options = {
+        key: orderData.key,
+        amount: orderData.amount,
+        currency: 'INR',
+        name: 'Ghumakkad - Trip Booking',
+        description: orderData.tripTitle || 'Trip Booking',
+        order_id: orderData.orderId,
+        handler: async function (response) {
+          try {
+            const joinResponse = await fetchWithAuth(`${API_BASE}/trips/${selectedTripId}/join`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ seatsBooked: parseInt(seatsBooked, 10) }),
+            });
+
+            if (joinResponse.ok) {
+              showNotification('Successfully joined trip! Awaiting approval.', 'success');
+              setShowJoinModal(false);
+              await loadDashboardData();
+              setCurrentTab('bookings');
+            } else {
+              const error = await joinResponse.json();
+              showNotification(error.message || 'Failed to join trip', 'error');
+            }
+          } catch (joinError) {
+            console.error('Error after payment:', joinError);
+            showNotification('Error while joining after payment', 'error');
+          }
+        },
+        theme: { color: '#7C3AED' },
+      };
+
+      if (!window.Razorpay) {
+        showNotification('Razorpay SDK not loaded', 'error');
+        return;
+      }
+      const razorpay = new window.Razorpay(options);
+      razorpay.open();
     } catch (error) {
-      console.error('Error joining trip:', error);
-      showNotification('Failed to join trip', 'error');
+      console.error('handleJoinTrip error:', error);
+      showNotification('Payment initiation failed', 'error');
     }
   };
 
-
+  /* ===================== CANCEL ===================== */
   const cancelTrip = async (tripId) => {
     if (!window.confirm('Are you sure you want to cancel this trip?')) return;
     try {
@@ -261,18 +303,17 @@ const Dashboard = () => {
         await loadDashboardData();
       } else {
         const error = await response.json();
-        showNotification(error.message || 'Failed to cancel trip', error);
+        showNotification(error.message || 'Failed to cancel trip', 'error');
       }
     } catch (error) {
-      showNotification('Failed to cancel trip', error);
+      showNotification('Failed to cancel trip', 'error');
     }
   };
 
-
-  const cancelBooking = async (tripId) => {
+  const cancelBooking = async (bookingId) => {
     if (!window.confirm('Are you sure you want to cancel this booking?')) return;
     try {
-      const response = await fetchWithAuth(`${API_BASE}/trips/${tripId}/cancel-booking`, {
+      const response = await fetchWithAuth(`${API_BASE}/trips/${bookingId}/cancel-booking`, {
         method: 'POST',
       });
       if (!response) return;
@@ -281,14 +322,14 @@ const Dashboard = () => {
         await loadDashboardData();
       } else {
         const error = await response.json();
-        showNotification(error.message || 'Failed to cancel booking', error);
+        showNotification(error.message || 'Failed to cancel booking', 'error');
       }
     } catch (error) {
-      showNotification('Failed to cancel booking', error);
+      showNotification('Failed to cancel booking', 'error');
     }
   };
 
- 
+  /* ===================== ACCEPT / REJECT ===================== */
   const acceptBooking = async (tripId, bookingId) => {
     try {
       const response = await fetchWithAuth(`${API_BASE}/trips/${tripId}/booking/${bookingId}/accept`, {
@@ -300,13 +341,13 @@ const Dashboard = () => {
         await loadDashboardData();
       } else {
         const error = await response.json();
-        showNotification(error.message || 'Failed to accept booking', error);
+        showNotification(error.message || 'Failed to accept booking', 'error');
       }
     } catch (error) {
-      showNotification('Failed to accept booking', error);
+      console.error('acceptBooking error:', error);
+      showNotification('Failed to accept booking', 'error');
     }
   };
-
 
   const rejectBooking = async (tripId, bookingId) => {
     try {
@@ -319,13 +360,15 @@ const Dashboard = () => {
         await loadDashboardData();
       } else {
         const error = await response.json();
-        showNotification(error.message || 'Failed to reject booking', error);
+        showNotification(error.message || 'Failed to reject booking', 'error');
       }
     } catch (error) {
-      showNotification('Failed to reject booking', error);
+      console.error('rejectBooking error:', error);
+      showNotification('Failed to reject booking', 'error');
     }
   };
 
+  /* ===================== SEARCH ===================== */
   const performSearch = useCallback(
     async (query) => {
       if (!query || query.length < 2) {
@@ -344,23 +387,19 @@ const Dashboard = () => {
           throw new Error(`Search failed with status ${response.status}`);
         }
         const data = await response.json();
-        console.log('Search API response:', data);
         let places = data.places || data.results || [];
         if (!Array.isArray(places)) {
-          console.error('Invalid places data:', places);
           showNotification('No valid places found', 'info');
           setSearchResults(null);
           setShowSearchModal(false);
           return;
         }
-        places = places
-          .slice(0, 10)
-          .map((place) => ({
-            name: place.name || 'Unknown Place',
-            address: place.address || place.location || 'No address available',
-            image: place.image || place.photo || null,
-            rating: place.rating && !isNaN(place.rating) ? parseFloat(place.rating) : null,
-          }));
+        places = places.slice(0, 10).map((place) => ({
+          name: place.name || 'Unknown Place',
+          address: place.address || place.location || 'No address available',
+          image: place.image || place.photo || null,
+          rating: place.rating && !isNaN(place.rating) ? parseFloat(place.rating) : null,
+        }));
         if (places.length > 0) {
           setSearchResults({ places, city: query });
           setShowSearchModal(true);
@@ -378,10 +417,9 @@ const Dashboard = () => {
         setIsSearching(false);
       }
     },
-    [fetchWithAuth, showNotification]
+    [showNotification, validateToken]
   );
 
-  // Handle search input with debouncing
   const handleSearchInput = useCallback(
     (e) => {
       const query = e.target.value;
@@ -389,12 +427,11 @@ const Dashboard = () => {
       clearTimeout(window.searchTimeout);
       window.searchTimeout = setTimeout(() => {
         performSearch(query.trim());
-      }, 2000);
+      }, 1200);
     },
     [performSearch]
   );
 
-  // Handle search submit
   const handleSearchSubmit = useCallback(
     (e) => {
       e.preventDefault();
@@ -403,15 +440,12 @@ const Dashboard = () => {
     [searchQuery, performSearch]
   );
 
-
+  /* ===================== FILTER HELPERS ===================== */
   const getFilteredTrips = () => {
-    if (activeFilter.trips === 'all') {
-      return myTrips.filter((trip) => trip.status !== 'cancelled');
-    }
+    if (activeFilter.trips === 'all') return myTrips.filter((trip) => trip.status !== 'cancelled');
     return myTrips.filter((trip) => trip.status === activeFilter.trips);
   };
 
- 
   const getFilteredBookings = () => {
     if (activeFilter.bookings === 'all') return myBookings;
     return myBookings.filter((booking) => {
@@ -431,10 +465,32 @@ const Dashboard = () => {
     if (booking.isCancelled) return 'cancelled';
     if (booking.isPast) return 'completed';
     if (booking.isUpcoming) return 'upcoming';
-    return 'unknown';
+    return booking.status || 'unknown';
   };
 
-  
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('userEmail');
+    showNotification('Successfully logged out!', 'success');
+    setTimeout(() => navigate('/login'), 1000);
+  };
+
+  const toggleSidebar = () => setIsSidebarOpen((v) => !v);
+
+  const getUserDisplayName = () => {
+    if (!currentUser?.email) return 'Traveler';
+    const username = currentUser.email.split('@')[0];
+    return username.charAt(0).toUpperCase() + username.slice(1);
+  };
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  };
+
+  /* ===================== LIFECYCLE ===================== */
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -443,65 +499,107 @@ const Dashboard = () => {
     }
     loadUserData();
     loadDashboardData();
-    const refreshInterval = setInterval(loadDashboardData, 5 * 60 * 1000);
-    const tokenCheckInterval = setInterval(async () => {
-      const token = localStorage.getItem('token');
-      if (token) {
-        try {
-          const response = await fetchWithAuth(`${API_BASE}/user/dashboard-data`);
-          if (!response) return;
-          validateToken(response);
-        } catch (error) {
-          console.error('Token validation check failed:', error);
-        }
-      }
-    }, 2 * 60 * 1000);
-    return () => {
-      clearInterval(refreshInterval);
-      clearInterval(tokenCheckInterval);
-    };
-  }, [fetchWithAuth, loadDashboardData, loadUserData, navigate, validateToken]);
 
-  // Update stats when trips/bookings change
+    const refreshInterval = setInterval(loadDashboardData, 5 * 60 * 1000);
+    return () => clearInterval(refreshInterval);
+  }, [loadDashboardData, loadUserData, navigate]);
+
   useEffect(() => {
     updateDashboardStats();
   }, [myTrips, myBookings, updateDashboardStats]);
 
-  
-  const getUserDisplayName = () => {
-    if (!currentUser?.email) return 'Traveler';
-    const username = currentUser.email.split('@')[0];
-    return username.charAt(0).toUpperCase() + username.slice(1);
+  /* ===================== PARTICLE BACKGROUND (from Admin.jsx) ===================== */
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const setSize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    setSize();
+
+    const particles = [];
+    const count = Math.min(120, Math.floor((canvas.width * canvas.height) / 12000));
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        vx: (Math.random() - 0.5) * 0.6,
+        vy: (Math.random() - 0.5) * 0.6,
+        radius: Math.random() * 1.8 + 0.8,
+      });
+    }
+
+    let animationId;
+    const animate = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      particles.forEach((p) => {
+        p.x += p.vx;
+        p.y += p.vy;
+        if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
+        if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(139,92,246,0.45)'; // purple-ish color to match Admin.jsx
+        ctx.fill();
+      });
+      animationId = requestAnimationFrame(animate);
+    };
+    animate();
+
+    const onResize = () => setSize();
+    window.addEventListener('resize', onResize);
+    return () => {
+      cancelAnimationFrame(animationId);
+      window.removeEventListener('resize', onResize);
+    };
+  }, []);
+
+  /* ===================== FLIP HELPERS ===================== */
+  const toggleFlip = (tripId) => {
+    setFlipped((prev) => {
+      const cp = new Set(prev);
+      if (cp.has(tripId)) cp.delete(tripId);
+      else cp.add(tripId);
+      return cp;
+    });
   };
 
- 
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
+  /* ===================== UTILITY FLAGS ===================== */
+  const isTripCancelable = (trip) => {
+    // allow cancel only when status is 'upcoming'
+    return trip && trip.status === 'upcoming';
   };
 
-
-  const toggleSidebar = () => {
-    setIsSidebarOpen(!isSidebarOpen);
+  const isBookingCancelable = (booking) => {
+    // booking.isUpcoming is used when available; fallback to status check
+    if (typeof booking.isUpcoming !== 'undefined') return booking.isUpcoming === true;
+    return getBookingStatus(booking) === 'upcoming';
   };
 
+  /* ===================== RENDER ===================== */
   return (
-    <div className="flex min-h-screen bg-gradient-to-br from-indigo-500 to-purple-600">
+    <div className="relative min-h-screen overflow-hidden bg-[#0f1220] text-white font-['Poppins',system-ui,sans-serif]">
+      {/* Particle background canvas */}
+      <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none z-0 opacity-60" />
+
       {/* Notifications */}
       <div className="fixed top-5 right-5 z-[10000] flex flex-col gap-2 max-w-[90%] sm:max-w-[420px]">
         {notifications.map((notif) => (
           <div
             key={notif.id}
-            className={`flex items-center gap-3 px-4 py-3 sm:px-6 sm:py-4 rounded-xl shadow-2xl backdrop-blur-sm border border-white/10 text-white animate-slideIn ${
+            className={`flex items-center gap-3 px-4 py-3 sm:px-6 sm:py-4 rounded-xl shadow-2xl backdrop-blur-xl border border-white/10 text-white animate-bounceIn ${
               notif.type === 'success'
-                ? 'bg-green-500'
+                ? 'bg-green-600/90'
                 : notif.type === 'warning'
-                ? 'bg-amber-500'
+                ? 'bg-amber-600/90'
                 : notif.type === 'error'
-                ? 'bg-red-500'
-                : 'bg-blue-500'
+                ? 'bg-red-600/90'
+                : 'bg-violet-600/90'
             }`}
           >
             <i
@@ -514,11 +612,12 @@ const Dashboard = () => {
                   ? 'times-circle'
                   : 'info-circle'
               }`}
-            ></i>
+            />
             <span className="text-sm sm:text-base">{notif.message}</span>
             <button
               onClick={() => setNotifications((prev) => prev.filter((n) => n.id !== notif.id))}
               className="ml-2 text-lg sm:text-xl hover:opacity-80"
+              aria-label="dismiss notification"
             >
               &times;
             </button>
@@ -526,941 +625,789 @@ const Dashboard = () => {
         ))}
       </div>
 
-     
+      {/* Sidebar */}
       <nav
-        className={`fixed top-0 left-0 h-screen w-64 sm:w-72 bg-white/95 backdrop-blur-xl border-r border-white/20 z-[1000] shadow-2xl flex flex-col transition-transform duration-300 ${
+        className={`fixed top-0 left-0 h-screen w-64 sm:w-72 bg-[rgba(255,255,255,0.06)] backdrop-blur-xl border-r border-[rgba(255,255,255,0.1)] z-[1000] shadow-[0_10px_30px_rgba(0,0,0,0.35)] flex flex-col transition-transform duration-300 ${
           isSidebarOpen ? 'translate-x-0' : '-translate-x-full sm:translate-x-0'
         }`}
       >
-        <div className="p-4 sm:p-6 border-b border-black/10 flex items-center justify-between">
+        <div className="p-4 sm:p-6 border-b border-[rgba(255,255,255,0.1)] flex items-center justify-between">
           <div
-            className="flex items-center gap-2 sm:gap-3 font-bold text-xl sm:text-2xl text-indigo-600 cursor-pointer"
+            className="flex items-center gap-2 sm:gap-3 font-bold text-xl sm:text-2xl text-white cursor-pointer"
             onClick={() => navigate('/')}
           >
-            <i className="fas fa-map-marked-alt text-2xl sm:text-3xl bg-gradient-to-br from-indigo-600 to-purple-600 bg-clip-text text-transparent"></i>
+            <div className="w-9 h-9 bg-gradient-to-br from-violet-600 to-cyan-500 rounded-xl flex items-center justify-center shadow-[0_6px_16px_rgba(124,58,237,0.45)]">
+              <i className="fas fa-map-marked-alt text-white"></i>
+            </div>
             <span>Ghumakkad</span>
           </div>
-          <button
-            className="sm:hidden text-2xl text-gray-600 hover:text-gray-800"
-            onClick={toggleSidebar}
-            aria-label="Close sidebar"
-          >
-            &times;
+          <button onClick={toggleSidebar} className="sm:hidden text-white hover:text-cyan-500" aria-label="close menu">
+            <i className="fas fa-times text-xl"></i>
           </button>
         </div>
-        <ul className="py-4 sm:py-8 flex-1">
-          {[
-            { id: 'overview', icon: 'fa-home', label: 'Overview' },
-            { id: 'trips', icon: 'fa-route', label: 'My Trips' },
-            { id: 'bookings', icon: 'fa-ticket-alt', label: 'My Bookings' },
-            { id: 'discover', icon: 'fa-compass', label: 'Discover' },
-            { id: 'create', icon: 'fa-plus-circle', label: 'Create Trip' },
-          ].map((item) => (
-            <li key={item.id} className="my-1 sm:my-2">
+
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-4 sm:p-6">
+            <div className="text-center mb-6 sm:mb-8">
+              <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-violet-600 to-cyan-500 rounded-full mx-auto mb-3 sm:mb-4 flex items-center justify-center shadow-[0_10px_24px_rgba(124,58,237,0.35)]">
+                <i className="fas fa-user text-white text-xl sm:text-2xl"></i>
+              </div>
+              <h3 className="text-lg sm:text-xl font-bold text-white mb-1">{getUserDisplayName()}</h3>
+              <p className="text-xs sm:text-sm text-[#a9b1c3]">{getGreeting()}</p>
+            </div>
+
+            <nav className="space-y-1">
+              {[
+                { id: 'overview', label: 'Overview', icon: 'fa-chart-line' },
+                { id: 'trips', label: 'My Trips', icon: 'fa-route' },
+                { id: 'bookings', label: 'My Bookings', icon: 'fa-calendar-check' },
+                { id: 'discover', label: 'Discover Trips', icon: 'fa-search-location' },
+                { id: 'create', label: 'Create Trip', icon: 'fa-plus' },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setCurrentTab(item.id);
+                    if (window.innerWidth < 640) setIsSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${
+                    currentTab === item.id
+                      ? 'bg-gradient-to-br from-violet-600 to-cyan-500 text-white shadow-[0_10px_24px_rgba(124,58,237,0.35)]'
+                      : 'text-[#a9b1c3] hover:bg-[rgba(255,255,255,0.08)] hover:text-white'
+                  }`}
+                >
+                  <i className={`fas ${item.icon} w-5`}></i>
+                  <span className="font-medium">{item.label}</span>
+                </button>
+              ))}
               <button
-                onClick={() => {
-                  setCurrentTab(item.id);
-                  setIsSidebarOpen(false); // Close sidebar on selection
-                }}
-                className={`flex items-center gap-3 sm:gap-4 px-4 sm:px-6 py-3 sm:py-4 w-full text-left transition-all duration-300 rounded-r-[50px] mr-2 sm:mr-4 text-sm sm:text-base ${
-                  currentTab === item.id
-                    ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-400/40 translate-x-1 sm:translate-x-2.5'
-                    : 'text-gray-600 hover:bg-gradient-to-r hover:from-indigo-600 hover:to-purple-600 hover:text-white hover:translate-x-1 sm:hover:translate-x-2.5'
-                }`}
+                onClick={handleLogout}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left text-[#a9b1c3] hover:bg-red-600/20 hover:text-red-400 transition-all mt-4"
               >
-                <i className={`fas ${item.icon} text-lg sm:text-xl w-5 text-center`}></i>
-                <span>{item.label}</span>
+                <i className="fas fa-sign-out-alt w-5"></i>
+                <span className="font-medium">Logout</span>
               </button>
-            </li>
-          ))}
-        </ul>
-        <div className="p-4 sm:p-6 border-t border-black/10">
-          <button
-            onClick={handleLogout}
-            className="w-full px-4 py-3 sm:py-4 bg-gradient-to-r from-red-500 to-orange-600 text-white rounded-xl font-semibold text-sm sm:text-base transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-red-500/40 flex items-center justify-center gap-2"
-          >
-            <i className="fas fa-sign-out-alt"></i>
-            <span>Logout</span>
-          </button>
+            </nav>
+          </div>
         </div>
       </nav>
 
- 
-      <main className={`flex-1 bg-gray-50 min-h-screen transition-all duration-300 ${isSidebarOpen ? 'ml-0' : 'ml-0 sm:ml-72'}`}>
-        {/* Hamburger Menu for Mobile */}
-        <button
-          className="sm:hidden fixed top-4 left-4 z-[1001] p-2 bg-indigo-600 text-white rounded-lg"
-          onClick={toggleSidebar}
-          aria-label="Toggle sidebar"
-        >
-          <i className="fas fa-bars text-lg"></i>
-        </button>
+      {/* Mobile overlay */}
+      {isSidebarOpen && <div className="fixed inset-0 bg-black/50 z-[999] sm:hidden" onClick={toggleSidebar} />}
 
-   \
-        <header className="bg-white/95 backdrop-blur-xl px-4 sm:px-6 md:px-8 py-4 sm:py-6 flex flex-col sm:flex-row justify-between items-center border-b border-black/10 sticky top-0 z-[100]">
-          <form onSubmit={handleSearchSubmit} className="flex-1 w-full sm:max-w-[600px] relative mb-4 sm:mb-0">
-            <div className="relative flex items-center bg-white rounded-[25px] shadow-lg overflow-hidden transition-all duration-300 focus-within:shadow-xl focus-within:shadow-indigo-600/30 focus-within:-translate-y-0.5">
-              <i className="fas fa-search absolute left-3 sm:left-4 text-gray-400 z-10 text-sm sm:text-base"></i>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={handleSearchInput}
-                placeholder="Search destinations, trips..."
-                className="flex-1 px-3 pl-10 sm:pl-12 py-3 sm:py-4 border-none outline-none text-sm sm:text-base bg-transparent"
-              />
-              <button
-                type="submit"
-                disabled={isSearching}
-                className="px-4 sm:px-6 py-3 sm:py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm sm:text-base transition-all duration-300 hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50"
-              >
-                {isSearching ? (
-                  <i className="fas fa-spinner fa-spin"></i>
-                ) : (
-                  <i className="fas fa-arrow-right"></i>
-                )}
-              </button>
-            </div>
-          </form>
-          <div className="flex items-center gap-4 sm:gap-6">
-            <div className="relative cursor-pointer p-2 rounded-full transition-all duration-300 hover:bg-indigo-600/10">
-              <i className="fas fa-bell text-lg sm:text-xl text-gray-600"></i>
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs px-2 py-0.5 rounded-[10px] min-w-[20px] text-center">
-                3
-              </span>
-            </div>
-            <div className="flex items-center gap-3 sm:gap-4 cursor-pointer px-3 sm:px-4 py-2 rounded-[25px] transition-all duration-300 hover:bg-indigo-600/10">
-              <img
-                src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80"
-                alt="Profile"
-                className="w-8 h-8 sm:w-10 sm:h-10 rounded-full object-cover border-2 sm:border-3 border-indigo-600"
-              />
-              <span className="font-semibold text-gray-800 text-sm sm:text-base">{getUserDisplayName()}</span>
-            </div>
-          </div>
-        </header>
+      {/* Mobile hamburger */}
+      <button
+        onClick={toggleSidebar}
+        className="sm:hidden fixed top-5 left-5 z-[1001] w-12 h-12 bg-[rgba(255,255,255,0.08)] backdrop-blur-xl border border-[rgba(255,255,255,0.1)] rounded-xl flex items-center justify-center text-white shadow-lg"
+        aria-label="open menu"
+      >
+        <i className="fas fa-bars text-xl"></i>
+      </button>
 
+      {/* Main content */}
+      <main className={`flex-1 transition-all duration-300 ${isSidebarOpen ? 'ml-0 sm:ml-0' : 'ml-0 sm:ml-72'} overflow-y-auto z-10`}>
         <div className="p-4 sm:p-6 md:p-8">
-          {/* Overview Tab */}
+          {/* Overview */}
           {currentTab === 'overview' && (
             <>
-              {/* Welcome Section */}
-              <section className="mb-8 sm:mb-12">
-                <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-6 sm:p-8 md:p-12 rounded-[20px] shadow-2xl shadow-indigo-600/30 relative overflow-hidden">
-                  <div className="absolute -top-1/2 -right-1/2 w-[200%] h-[200%] bg-radial-gradient opacity-10 animate-float"></div>
-                  <div className="relative z-10 mb-6 sm:mb-8">
-                    <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-3 sm:mb-4">
-                      {getGreeting()}, {getUserDisplayName()}!
-                    </h1>
-                    <p className="text-sm sm:text-base md:text-lg opacity-90 leading-relaxed">
-                      Ready to plan your next adventure? Discover amazing destinations and connect with fellow travelers.
-                    </p>
+              <div className="mb-6 sm:mb-8">
+                <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2 [text-shadow:2px_2px_8px_rgba(0,0,0,0.7)]">
+                  Welcome back, {getUserDisplayName()}!
+                </h1>
+                <p className="text-[#a9b1c3] text-sm sm:text-base">{getGreeting()}! Here's what's happening with your trips.</p>
+              </div>
+
+              {/* Stats */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 mb-8">
+                {[
+                  { label: 'Total Trips', value: dashboardStats.totalTrips, icon: 'fa-route', color: 'from-blue-500 to-cyan-500' },
+                  { label: 'Upcoming', value: dashboardStats.upcomingTrips, icon: 'fa-clock', color: 'from-green-500 to-emerald-500' },
+                  { label: 'Total Bookings', value: dashboardStats.totalBookings, icon: 'fa-calendar-check', color: 'from-violet-600 to-purple-600' },
+                  { label: 'Pending', value: dashboardStats.pendingBookings, icon: 'fa-hourglass-half', color: 'from-amber-500 to-orange-500' },
+                ].map((stat, i) => (
+                  <div key={i} className="bg-[rgba(255,255,255,0.06)] backdrop-blur-xl rounded-[22px] p-4 sm:p-6 border border-[rgba(255,255,255,0.1)] shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
+                    <div className="flex items-center justify-between mb-2">
+                      <i className={`fas ${stat.icon} text-2xl bg-gradient-to-br ${stat.color} bg-clip-text text-transparent`} />
+                      <span className="text-[#a9b1c3] text-sm font-medium">{stat.label}</span>
+                    </div>
+                    <p className="text-2xl sm:text-3xl font-bold text-white">{stat.value}</p>
                   </div>
-                  <div className="relative z-10 grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 md:gap-8">
-                    {[
-                      { label: 'Trips Created', value: dashboardStats.totalTrips },
-                      { label: 'Trips Joined', value: dashboardStats.totalBookings },
-                      { label: 'Upcoming Trips', value: dashboardStats.upcomingTrips },
-                      { label: 'Pending Bookings', value: dashboardStats.pendingBookings },
-                    ].map((stat, i) => (
-                      <div key={i} className="text-center">
-                        <div className="text-xl sm:text-2xl md:text-3xl font-bold mb-1 sm:mb-2">{stat.value}</div>
-                        <div className="text-xs sm:text-sm opacity-80">{stat.label}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </section>
+                ))}
+              </div>
+
               {/* Quick Actions */}
-              <section className="mb-8 sm:mb-12">
-                <h2 className="text-xl sm:text-2xl md:text-3xl font-bold mb-4 sm:mb-6 text-gray-800">Quick Actions</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
-                  {[
-                    { icon: 'fa-plus', title: 'Create New Trip', desc: 'Plan your next adventure', tab: 'create' },
-                    { icon: 'fa-compass', title: 'Discover Trips', desc: 'Find exciting adventures', tab: 'discover' },
-                    { icon: 'fa-route', title: 'My Trips', desc: 'Manage your trips', tab: 'trips' },
-                  ].map((action, i) => (
-                    <div
-                      key={i}
-                      onClick={() => {
-                        setCurrentTab(action.tab);
-                        setIsSidebarOpen(false);
-                      }}
-                      className="bg-white p-4 sm:p-6 md:p-8 rounded-2xl text-center shadow-lg border border-black/5 transition-all duration-300 cursor-pointer hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-600/20 hover:border-indigo-600"
-                    >
-                      <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4 text-white text-lg sm:text-xl md:text-2xl">
-                        <i className={`fas ${action.icon}`}></i>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-8">
+                <button
+                  onClick={() => setCurrentTab('create')}
+                  className="bg-[rgba(255,255,255,0.06)] backdrop-blur-xl border border-[rgba(255,255,255,0.1)] rounded-[22px] p-6 sm:p-8 text-center hover:bg-[rgba(255,255,255,0.08)] transition-all group shadow-[0_10px_30px_rgba(0,0,0,0.35)]"
+                >
+                  <i className="fas fa-plus text-3xl sm:text-4xl bg-gradient-to-br from-violet-600 to-purple-600 bg-clip-text text-transparent mb-3 sm:mb-4"></i>
+                  <h3 className="text-lg sm:text-xl font-bold text-white mb-2">Create New Trip</h3>
+                  <p className="text-[#a9b1c3] text-sm">Plan your next adventure</p>
+                </button>
+
+                <button
+                  onClick={() => setCurrentTab('discover')}
+                  className="bg-[rgba(255,255,255,0.06)] backdrop-blur-xl border border-[rgba(255,255,255,0.1)] rounded-[22px] p-6 sm:p-8 text-center hover:bg-[rgba(255,255,255,0.08)] transition-all group shadow-[0_10px_30px_rgba(0,0,0,0.35)]"
+                >
+                  <i className="fas fa-search-location text-3xl sm:text-4xl bg-gradient-to-br from-green-500 to-emerald-500 bg-clip-text text-transparent mb-3 sm:mb-4"></i>
+                  <h3 className="text-lg sm:text-xl font-bold text-white mb-2">Discover Trips</h3>
+                  <p className="text-[#a9b1c3] text-sm">Find trips to join</p>
+                </button>
+
+                <button
+                  onClick={() => setCurrentTab('bookings')}
+                  className="bg-[rgba(255,255,255,0.06)] backdrop-blur-xl border border-[rgba(255,255,255,0.1)] rounded-[22px] p-6 sm:p-8 text-center hover:bg-[rgba(255,255,255,0.08)] transition-all group shadow-[0_10px_30px_rgba(0,0,0,0.35)]"
+                >
+                  <i className="fas fa-calendar-check text-3xl sm:text-4xl bg-gradient-to-br from-violet-600 to-pink-500 bg-clip-text text-transparent mb-3 sm:mb-4"></i>
+                  <h3 className="text-lg sm:text-xl font-bold text-white mb-2">My Bookings</h3>
+                  <p className="text-[#a9b1c3] text-sm">Manage your reservations</p>
+                </button>
+              </div>
+
+              {/* Recent Activity */}
+              <div className="bg-[rgba(255,255,255,0.06)] backdrop-blur-xl rounded-[22px] border border-[rgba(255,255,255,0.1)] p-6 sm:p-8 shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
+                <h2 className="text-xl sm:text-2xl font-bold text-white mb-6">Recent Activity</h2>
+                <div className="space-y-4">
+                  {myBookings.slice(0, 3).map((booking, index) => (
+                    <div key={index} className="flex items-center gap-4 p-4 bg-[rgba(255,255,255,0.04)] rounded-xl border border-[rgba(255,255,255,0.08)]">
+                      <div className="w-12 h-12 bg-gradient-to-br from-violet-600 to-cyan-500 rounded-lg flex items-center justify-center shadow-[0_6px_16px_rgba(124,58,237,0.45)]">
+                        <i className="fas fa-calendar text-white text-sm"></i>
                       </div>
-                      <h3 className="text-lg sm:text-xl font-semibold mb-1 sm:mb-2 text-gray-800">{action.title}</h3>
-                      <p className="text-gray-600 text-xs sm:text-sm">{action.desc}</p>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white font-medium truncate">{booking.title}</p>
+                        <p className="text-[#a9b1c3] text-sm truncate">{booking.from} → {booking.to}</p>
+                      </div>
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                          booking.status === 'upcoming' ? 'bg-green-600/90 text-white' : 'bg-gray-600/90 text-white'
+                        }`}
+                      >
+                        {booking.status}
+                      </span>
                     </div>
                   ))}
+                  {myBookings.length === 0 && <p className="text-center text-[#a9b1c3] py-8">No recent activity. Create or join a trip!</p>}
                 </div>
-              </section>
-              {/* Popular Destinations */}
-              <section>
-                <h2 className="text-xl sm:text-2xl md:text-3xl font-bold mb-4 sm:mb-6 text-gray-800">Popular Destinations</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 md:gap-8">
-                  {[
-                    {
-                      img: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=80',
-                      tag: 'Mountains',
-                      title: 'Swiss Alps',
-                      desc: 'Breathtaking mountain views and adventure sports',
-                      location: 'Switzerland',
-                      travelers: 24,
-                    },
-                    {
-                      img: 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=80',
-                      tag: 'Beach',
-                      title: 'Bali, Indonesia',
-                      desc: 'Tropical paradise with rich culture',
-                      location: 'Indonesia',
-                      travelers: 18,
-                    },
-                    {
-                      img: 'https://images.unsplash.com/photo-1518548419970-58e3b4079ab2?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=80',
-                      tag: 'Island',
-                      title: 'Santorini',
-                      desc: 'Stunning sunsets and white architecture',
-                      location: 'Greece',
-                      travelers: 31,
-                    },
-                    {
-                      img: 'https://images.unsplash.com/photo-1501594907352-04cda38ebc29?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=80',
-                      tag: 'Historical',
-                      title: 'Machu Picchu',
-                      desc: 'Ancient Incan citadel in the mountains',
-                      location: 'Peru',
-                      travelers: 15,
-                    },
-                  ].map((dest, i) => (
-                    <div
-                      key={i}
-                      className="bg-white rounded-2xl overflow-hidden shadow-lg transition-all duration-300 cursor-pointer hover:-translate-y-1 hover:shadow-2xl"
-                    >
-                      <div className="relative h-40 sm:h-48 md:h-[200px] overflow-hidden">
-                        <img
-                          src={dest.img}
-                          alt={dest.title}
-                          className="w-full h-full object-cover transition-transform duration-300 hover:scale-110"
-                        />
-                        <div className="absolute top-2 sm:top-4 right-2 sm:right-4">
-                          <span className="bg-indigo-600/90 text-white px-2 sm:px-4 py-1 sm:py-2 rounded-[20px] text-xs font-semibold backdrop-blur-sm">
-                            {dest.tag}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="p-4 sm:p-6">
-                        <h3 className="text-lg sm:text-xl font-semibold mb-2 text-gray-800">{dest.title}</h3>
-                        <p className="text-gray-600 text-sm mb-3 sm:mb-4 leading-relaxed">{dest.desc}</p>
-                        <div className="flex justify-between text-xs sm:text-sm text-gray-400">
-                          <span className="flex items-center gap-1 sm:gap-2">
-                            <i className="fas fa-map-marker-alt"></i> {dest.location}
-                          </span>
-                          <span className="flex items-center gap-1 sm:gap-2">
-                            <i className="fas fa-users"></i> {dest.travelers} travelers
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </section>
+              </div>
             </>
           )}
 
-          {/* My Trips Tab */}
+          {/* ===================== MY TRIPS ===================== */}
           {currentTab === 'trips' && (
             <>
-              <div className="flex flex-col sm:flex-row justify-between items-center mb-6 sm:mb-8 pb-4 border-b border-gray-200">
-                <h2 className="text-xl sm:text-2xl md:text-3xl text-gray-800 m-0">My Trips</h2>
-                <div className="flex gap-2 mt-4 sm:mt-0 flex-wrap">
-                  {['all', 'upcoming', 'ongoing', 'completed', 'cancelled'].map((filter) => (
-                    <button
-                      key={filter}
-                      onClick={() => setActiveFilter({ ...activeFilter, trips: filter })}
-                      className={`px-3 sm:px-4 py-2 border rounded-[20px] text-xs sm:text-sm transition-all duration-300 ${
-                        activeFilter.trips === filter
-                          ? 'bg-indigo-600 text-white border-indigo-600'
-                          : 'bg-white text-gray-600 border-gray-300 hover:border-indigo-600 hover:text-indigo-600'
-                      }`}
-                    >
-                      {filter.charAt(0).toUpperCase() + filter.slice(1)}
-                    </button>
-                  ))}
+              <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white m-0 [text-shadow:2px_2px_8px_rgba(0,0,0,0.7)]">My Trips</h2>
+                  <p className="text-[#a9b1c3] text-sm sm:text-base mt-1">Trips you've created</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={activeFilter.trips}
+                    onChange={(e) => setActiveFilter((prev) => ({ ...prev, trips: e.target.value }))}
+                    className="px-3 py-2 bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.12)] rounded-xl text-white text-sm focus:outline-none focus:border-violet-500"
+                  >
+                    <option value="all" className="bg-[#0f1220] text-white">All Trips</option>
+                    <option value="upcoming" className="bg-[#0f1220] text-white">Upcoming</option>
+                    <option value="ongoing" className="bg-[#0f1220] text-white">Ongoing</option>
+                    <option value="completed" className="bg-[#0f1220] text-white">Completed</option>
+                  </select>
                 </div>
               </div>
-              <div className="flex flex-col gap-4 sm:gap-6">
-                {getFilteredTrips().length === 0 ? (
-                  <div className="text-center py-8 sm:py-12 text-gray-600">
-                    <i className="fas fa-route text-4xl sm:text-5xl text-gray-300 mb-4"></i>
-                    <h3 className="text-lg sm:text-xl md:text-2xl mb-2 text-gray-800">No Trips Yet</h3>
-                    <p className="mb-4 sm:mb-6 text-sm sm:text-base">
-                      You haven't created any trips yet. Start by creating your first adventure!
-                    </p>
-                    <button
-                      onClick={() => {
-                        setCurrentTab('create');
-                        setIsSidebarOpen(false);
-                      }}
-                      className="px-4 sm:px-6 py-2 sm:py-3 bg-indigo-600 text-white rounded-lg font-semibold text-sm sm:text-base hover:bg-indigo-700 transition-all"
-                    >
-                      Create Trip
-                    </button>
-                  </div>
-                ) : (
-                  getFilteredTrips().map((trip) => (
-                    <div
-                      key={trip._id}
-                      className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden transition-all duration-300 hover:-translate-y-0.5 hover:shadow-2xl"
-                    >
-                      {trip.image && trip.image.trim() && (
-                        <div className="h-48 sm:h-60 overflow-hidden">
-                          <img
-                            src={trip.image}
-                            alt={trip.title}
-                            onError={(e) => (e.target.style.display = 'none')}
-                            className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
-                            loading="lazy"
-                          />
-                        </div>
+
+              {getFilteredTrips().length === 0 ? (
+                <div className="text-center py-12 sm:py-16 bg-[rgba(255,255,255,0.04)] rounded-[22px] border border-[rgba(255,255,255,0.08)]">
+                  <i className="fas fa-route text-5xl sm:text-6xl text-[#a9b1c3]/30 mb-4"></i>
+                  <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">No trips yet</h3>
+                  <p className="text-[#a9b1c3] mb-6">Create your first trip to get started!</p>
+                  <button
+                    onClick={() => setCurrentTab('create')}
+                    className="px-6 py-3 bg-gradient-to-br from-violet-600 to-cyan-500 text-white rounded-xl font-semibold hover:scale-105 transition-all shadow-[0_10px_24px_rgba(124,58,237,0.35)]"
+                  >
+                    Create Trip
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4 sm:space-y-6">
+                  {getFilteredTrips().map((trip) => (
+                    <div key={trip._id} className="bg-[rgba(255,255,255,0.06)] backdrop-blur-xl border border-[rgba(255,255,255,0.1)] rounded-[22px] p-4 sm:p-6 overflow-hidden hover:shadow-[0_15px_40px_rgba(124,58,237,0.25)] transition-all group">
+                      {trip.image && (
+                        <img
+                          src={trip.image}
+                          alt={trip.title}
+                          className="w-full h-40 sm:h-48 object-cover rounded-xl mb-4 sm:mb-6 group-hover:scale-105 transition-transform duration-300"
+                        />
                       )}
-                      <div className="p-4 sm:p-6">
-                        <div className="flex flex-col sm:flex-row justify-between items-start mb-4">
-                          <div>
-                            <h3 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800 mb-2">{trip.title}</h3>
+
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                        <div className="flex-1">
+                          <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-white mb-2 truncate">{trip.title}</h3>
+                          <div className="flex items-center gap-2 mb-3 sm:mb-4">
                             <span
-                              className={`px-2 sm:px-3 py-1 rounded-[20px] text-xs font-semibold ${
+                              className={`px-3 py-1 rounded-full text-xs font-semibold ${
                                 trip.status === 'upcoming'
-                                  ? 'bg-blue-100 text-blue-800'
+                                  ? 'bg-green-600/90'
                                   : trip.status === 'ongoing'
-                                  ? 'bg-amber-100 text-amber-800'
+                                  ? 'bg-amber-600/90'
                                   : trip.status === 'completed'
-                                  ? 'bg-green-100 text-green-800'
-                                  : 'bg-red-100 text-red-800'
-                              }`}
+                                  ? 'bg-blue-600/90'
+                                  : 'bg-gray-600/90'
+                              } text-white`}
                             >
                               {trip.status}
                             </span>
                           </div>
                           <div className="flex gap-2 mt-2 sm:mt-0">
-                            {trip.status === 'upcoming' && (
-                              <button
-                                onClick={() => cancelTrip(trip._id)}
-                                className="px-3 sm:px-4 py-2 bg-red-500 text-white rounded-lg font-semibold text-xs sm:text-sm hover:bg-red-600 transition-all flex items-center gap-2"
-                              >
-                                <i className="fas fa-times"></i> Cancel
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4">
-                          <div className="flex items-center gap-2 text-gray-600 text-sm">
-                            <i className="fas fa-map-marker-alt text-blue-500 w-4"></i>
-                            <span>
-                              {trip.from} → {trip.to}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2 text-gray-600 text-sm">
-                            <i className="fas fa-calendar text-blue-500 w-4"></i>
-                            <span>
-                              {new Date(trip.startDate).toLocaleDateString()} -{' '}
-                              {new Date(trip.endDate).toLocaleDateString()}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2 text-gray-600 text-sm">
-                            <i className="fas fa-users text-blue-500 w-4"></i>
-                            <span>{trip.availableSeats || trip.seats} seats available</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-gray-600 text-sm">
-                            <i className="fas fa-dollar-sign text-blue-500 w-4"></i>
-                            <span>${trip.pricePerPerson} per person</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-gray-600 text-sm">
-                            <i className={`fas ${getTransportIcon(trip.modeOfTransport)} text-blue-500 w-4`}></i>
-                            <span>{trip.modeOfTransport}</span>
-                          </div>
-                        </div>
-                        {trip.bookings && trip.bookings.length > 0 && (
-                          <div className="mt-4 pt-4 border-t border-gray-200">
-                            <h4 className="text-sm sm:text-base text-gray-800 mb-3 font-semibold">
-                              Bookings ({trip.bookings.length})
-                            </h4>
-                            {trip.bookings.map((booking) => (
-                              <div
-                                key={booking._id}
-                                className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-2 px-3 bg-gray-50 rounded-lg mb-2 text-sm"
-                              >
-                                <div className="flex-1 flex flex-col sm:flex-row sm:items-center sm:gap-4">
-                                  <span>{booking.user?.email || 'Unknown User'}</span>
-                                  <span>{booking.seatsBooked} seats</span>
-                                  <span
-                                    className={`px-2 py-1 rounded-xl text-xs font-semibold ${
-                                      booking.status === 'pending'
-                                        ? 'bg-blue-100 text-blue-800'
-                                        : booking.status === 'confirmed'
-                                        ? 'bg-green-100 text-green-800'
-                                        : 'bg-red-100 text-red-800'
-                                    }`}
-                                  >
-                                    {booking.status}
-                                  </span>
-                                </div>
-                                {booking.status === 'pending' && (
-                                  <div className="flex gap-1 mt-2 sm:mt-0">
-                                    <button
-                                      onClick={() => acceptBooking(trip._id, booking._id)}
-                                      className="px-2 sm:px-3 py-1 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700"
-                                    >
-                                      Accept
-                                    </button>
-                                    <button
-                                      onClick={() => rejectBooking(trip._id, booking._id)}
-                                      className="px-2 sm:px-3 py-1 bg-red-500 text-white rounded-lg text-xs font-semibold hover:bg-red-600"
-                                    >
-                                      Reject
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </>
-          )}
-
-          {/* My Bookings Tab */}
-          {currentTab === 'bookings' && (
-            <>
-              <div className="flex flex-col sm:flex-row justify-between items-center mb-6 sm:mb-8 pb-4 border-b border-gray-200">
-                <h2 className="text-xl sm:text-2xl md:text-3xl text-gray-800 m-0">My Bookings</h2>
-                <div className="flex gap-2 mt-4 sm:mt-0 flex-wrap">
-                  {['all', 'upcoming', 'past', 'cancelled'].map((filter) => (
-                    <button
-                      key={filter}
-                      onClick={() => setActiveFilter({ ...activeFilter, bookings: filter })}
-                      className={`px-3 sm:px-4 py-2 border rounded-[20px] text-xs sm:text-sm transition-all duration-300 ${
-                        activeFilter.bookings === filter
-                          ? 'bg-indigo-600 text-white border-indigo-600'
-                          : 'bg-white text-gray-600 border-gray-300 hover:border-indigo-600 hover:text-indigo-600'
-                      }`}
-                    >
-                      {filter.charAt(0).toUpperCase() + filter.slice(1)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="flex flex-col gap-4 sm:gap-6">
-                {getFilteredBookings().length === 0 ? (
-                  <div className="text-center py-8 sm:py-12 text-gray-600">
-                    <i className="fas fa-ticket-alt text-4xl sm:text-5xl text-gray-300 mb-4"></i>
-                    <h3 className="text-lg sm:text-xl md:text-2xl mb-2 text-gray-800">No Bookings Yet</h3>
-                    <p className="mb-4 sm:mb-6 text-sm sm:text-base">
-                      You haven't joined any trips yet. Discover exciting adventures in the Discover tab!
-                    </p>
-                    <button
-                      onClick={() => {
-                        setCurrentTab('discover');
-                        setIsSidebarOpen(false);
-                      }}
-                      className="px-4 sm:px-6 py-2 sm:py-3 bg-indigo-600 text-white rounded-lg font-semibold text-sm sm:text-base hover:bg-indigo-700 transition-all"
-                    >
-                      Discover Trips
-                    </button>
-                  </div>
-                ) : (
-                  getFilteredBookings().map((booking) => (
-                    <div
-                      key={booking._id}
-                      className="bg-white rounded-2xl p-4 sm:p-6 shadow-lg border border-gray-200 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-2xl"
-                    >
-                      <div className="flex flex-col sm:flex-row justify-between items-start mb-4">
-                        <div>
-                          <h3 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800 mb-2">{booking.title}</h3>
-                          <span
-                            className={`px-2 sm:px-3 py-1 rounded-[20px] text-xs font-semibold ${
-                              getBookingStatus(booking) === 'upcoming'
-                                ? 'bg-blue-100 text-blue-800'
-                                : getBookingStatus(booking) === 'completed'
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-red-100 text-red-800'
-                            }`}
-                          >
-                            {getBookingStatus(booking)}
-                          </span>
-                        </div>
-                        <div className="flex gap-2 mt-2 sm:mt-0">
-                          {booking.isUpcoming && !booking.isCancelled && (
                             <button
-                              onClick={() => cancelBooking(booking._id)}
-                              className="px-3 sm:px-4 py-2 bg-red-500 text-white rounded-lg font-semibold text-xs sm:text-sm hover:bg-red-600 transition-all flex items-center gap-2"
+                              onClick={() => cancelTrip(trip._id)}
+                              disabled={!isTripCancelable(trip)}
+                              className={`px-3 sm:px-4 py-2 ${isTripCancelable(trip) ? 'bg-red-600/90 hover:bg-red-700' : 'bg-gray-600/60 cursor-not-allowed'} text-white rounded-xl font-semibold text-xs sm:text-sm transition-all flex items-center gap-2`}
                             >
                               <i className="fas fa-times"></i> Cancel
                             </button>
-                          )}
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-2 text-sm sm:text-base">
+                          <span className="text-white font-bold">${trip.pricePerPerson}/person</span>
+                          <span className="text-[#a9b1c3]">{trip.availableSeats} seats left</span>
                         </div>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                        <div className="flex items-center gap-2 text-gray-600 text-sm">
-                          <i className="fas fa-map-marker-alt text-blue-500 w-4"></i>
-                          <span>
-                            {booking.from} → {booking.to}
-                          </span>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-4 text-[#a9b1c3] text-sm">
+                        <div className="flex items-center gap-2"><i className="fas fa-map-marker-alt text-cyan-400 w-4"></i><span>{trip.from} → {trip.to}</span></div>
+                        <div className="flex items-center gap-2"><i className="fas fa-calendar text-cyan-400 w-4"></i><span>{new Date(trip.startDate).toLocaleDateString()} - {new Date(trip.endDate).toLocaleDateString()}</span></div>
+                        <div className="flex items-center gap-2"><i className="fas fa-users text-cyan-400 w-4"></i><span>Booked: {Array.isArray(trip.bookings) ? trip.bookings.length : 0}</span></div>
+                        <div className="flex items-center gap-2"><i className={`fas ${getTransportIcon(trip.modeOfTransport)} text-cyan-400 w-4`} /><span>{trip.modeOfTransport || 'Car'}</span></div>
+                      </div>
+
+                      {/* Weather */}
+                      {trip.weather && trip.weather.length > 0 ? (
+                        <div className="mt-4 p-3 bg-[rgba(255,255,255,0.04)] rounded-xl border border-[rgba(255,255,255,0.08)]">
+                          <h4 className="text-sm font-semibold text-white mb-2">Weather Forecast</h4>
+                          <div className="flex gap-3 overflow-x-auto pb-2">
+                            {trip.weather.map((w, index) => (
+                              <div key={index} className="flex flex-col items-center min-w-[80px] bg-[rgba(255,255,255,0.04)] p-2 rounded-lg border border-[rgba(255,255,255,0.08)]">
+                                <img src={`https://openweathermap.org/img/wn/${w.icon}@2x.png`} alt={w.description} className="w-8 h-8" />
+                                <span className="text-xs text-white mt-1">{new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                                <span className="text-xs font-medium text-white">{Math.round(w.temp)}°C</span>
+                                <span className="text-[10px] text-[#a9b1c3] capitalize">{w.description}</span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 text-gray-600 text-sm">
-                          <i className="fas fa-calendar text-blue-500 w-4"></i>
-                          <span>
-                            {new Date(booking.startDate).toLocaleDateString()} -{' '}
-                            {new Date(booking.endDate).toLocaleDateString()}
-                          </span>
+                      ) : (
+                        <p className="mt-4 text-sm text-[#a9b1c3]">Forecast not available</p>
+                      )}
+
+                      {/* Bookings list (author can accept/reject only when trip is upcoming) */}
+                      {Array.isArray(trip.bookings) && trip.bookings.length > 0 && (
+                        <div className="mt-4 pt-4 border-t border-[rgba(255,255,255,0.1)]">
+                          <h4 className="text-sm font-semibold text-white mb-3">Bookings</h4>
+                          <div className="space-y-2 max-h-40 overflow-y-auto">
+                            {trip.bookings.map((booking) => (
+                              <div key={booking._id} className="flex items-center justify-between p-2 bg-[rgba(255,255,255,0.04)] rounded-lg border border-[rgba(255,255,255,0.08)]">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 bg-[rgba(255,255,255,0.03)] rounded-full flex items-center justify-center">
+                                    <i className="fas fa-user text-xs text-[#a9b1c3]"></i>
+                                  </div>
+                                  <div className="text-xs text-[#a9b1c3]">{booking.user?.email || booking.userEmail || 'User'}</div>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-white">{booking.seatsBooked} seats</span>
+                                  <span className={`px-2 py-1 rounded-full text-[10px] font-semibold ${booking.status === 'accepted' ? 'bg-green-600/90 text-white' : booking.status === 'pending' ? 'bg-amber-600/90 text-white' : 'bg-red-600/90 text-white'}`}>
+                                    {booking.status}
+                                  </span>
+
+                                  {String(trip.createdBy) === String(currentUser?._id) && booking.status === 'pending' && trip.status === 'upcoming' && (
+                                    <>
+                                      <button onClick={() => acceptBooking(trip._id, booking._id)} className="text-green-400 hover:text-green-300 text-xs p-1 rounded-full" title="Accept booking">
+                                        <i className="fas fa-check"></i>
+                                      </button>
+                                      <button onClick={() => rejectBooking(trip._id, booking._id)} className="text-red-400 hover:text-red-300 text-xs p-1 rounded-full" title="Reject booking">
+                                        <i className="fas fa-times"></i>
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 text-gray-600 text-sm">
-                          <i className="fas fa-user text-blue-500 w-4"></i>
-                          <span>Created by: {booking.createdBy?.email}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ===================== MY BOOKINGS ===================== */}
+          {currentTab === 'bookings' && (
+            <>
+              <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white m-0 [text-shadow:2px_2px_8px_rgba(0,0,0,0.7)]">My Bookings</h2>
+                  <p className="text-[#a9b1c3] text-sm sm:text-base mt-1">Trips you've booked</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={activeFilter.bookings}
+                    onChange={(e) => setActiveFilter((prev) => ({ ...prev, bookings: e.target.value }))}
+                    className="px-3 py-2 bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.12)] rounded-xl text-white text-sm focus:outline-none focus:border-violet-500"
+                  >
+                    <option value="all" className="bg-[#0f1220] text-white">All</option>
+                    <option value="upcoming" className="bg-[#0f1220] text-white">Upcoming</option>
+                    <option value="past" className="bg-[#0f1220] text-white">Past</option>
+                    <option value="cancelled" className="bg-[#0f1220] text-white">Cancelled</option>
+                  </select>
+                </div>
+              </div>
+
+              {getFilteredBookings().length === 0 ? (
+                <div className="text-center py-12 sm:py-16 bg-[rgba(255,255,255,0.04)] rounded-[22px] border border-[rgba(255,255,255,0.08)]">
+                  <i className="fas fa-calendar-check text-5xl sm:text-6xl text-[#a9b1c3]/30 mb-4"></i>
+                  <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">No bookings yet</h3>
+                  <p className="text-[#a9b1c3] mb-6">Join some trips to see your bookings here!</p>
+                  <button
+                    onClick={() => setCurrentTab('discover')}
+                    className="px-6 py-3 bg-gradient-to-br from-violet-600 to-cyan-500 text-white rounded-xl font-semibold hover:scale-105 transition-all shadow-[0_10px_24px_rgba(124,58,237,0.35)]"
+                  >
+                    Discover Trips
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4 sm:space-y-6">
+                  {getFilteredBookings().map((booking) => {
+                    const bookingCancelable = isBookingCancelable(booking);
+                    return (
+                      <div key={booking._id} className="bg-[rgba(255,255,255,0.06)] backdrop-blur-xl border border-[rgba(255,255,255,0.1)] rounded-[22px] p-4 sm:p-6 overflow-hidden hover:shadow-[0_15px_40px_rgba(124,58,237,0.25)] transition-all group">
+                        {/* Hide images in My Bookings as requested */}
+                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                          <div className="flex-1">
+                            <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-white mb-2 truncate">{booking.title}</h3>
+                            <div className="flex items-center gap-2 mb-3 sm:mb-4">
+                              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                getBookingStatus(booking) === 'upcoming' ? 'bg-green-600/90' :
+                                getBookingStatus(booking) === 'completed' ? 'bg-blue-600/90' :
+                                getBookingStatus(booking) === 'cancelled' ? 'bg-red-600/90' : 'bg-gray-600/90'
+                              } text-white`}>
+                                {getBookingStatus(booking)}
+                              </span>
+                              {booking.mySeatsBooked > 0 && <span className="px-3 py-1 bg-violet-600/90 text-white rounded-full text-xs font-semibold">{booking.mySeatsBooked} seats</span>}
+                            </div>
+
+                            {booking.daysLeft > 0 && (
+                              <div className="flex items-center gap-2 mb-4 text-[#a9b1c3]">
+                                <i className="fas fa-clock text-cyan-400"></i>
+                                <span>{booking.daysLeft} days left</span>
+                              </div>
+                            )}
+
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => cancelBooking(booking._id)}
+                                disabled={!bookingCancelable}
+                                className={`px-3 py-2 ${bookingCancelable ? 'bg-red-600/90 hover:bg-red-700' : 'bg-gray-600/60 cursor-not-allowed'} text-white rounded-xl font-semibold text-xs sm:text-sm hover:transition-all flex items-center gap-2`}
+                              >
+                                <i className="fas fa-times"></i> Cancel Booking
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col items-end gap-2 text-sm sm:text-base">
+                            <span className="text-white font-bold">${(booking.pricePerPerson || 0) * (booking.mySeatsBooked || 1)}</span>
+                            <span className="text-[#a9b1c3]">Total for you</span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 text-gray-600 text-sm">
-                          <i className="fas fa-ticket-alt text-blue-500 w-4"></i>
-                          <span>{booking.mySeatsBooked} seats booked</span>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-4">
+                          <div className="flex items-center gap-2 text-[#a9b1c3] text-sm"><i className="fas fa-map-marker-alt text-cyan-400 w-4"></i><span>{booking.from} → {booking.to}</span></div>
+                          <div className="flex items-center gap-2 text-[#a9b1c3] text-sm"><i className="fas fa-calendar text-cyan-400 w-4"></i><span>{new Date(booking.startDate).toLocaleDateString()} - {new Date(booking.endDate).toLocaleDateString()}</span></div>
                         </div>
-                        {booking.daysLeft > 0 && (
-                          <div className="flex items-center gap-2 text-gray-600 text-sm">
-                            <i className="fas fa-clock text-blue-500 w-4"></i>
-                            <span>{booking.daysLeft} days left</span>
+
+                        {/* Weather */}
+                        {booking.weather && booking.weather.length > 0 && (
+                          <div className="mt-4 p-3 bg-[rgba(255,255,255,0.04)] rounded-xl border border-[rgba(255,255,255,0.08)]">
+                            <h4 className="text-sm font-semibold text-white mb-2">Weather Forecast</h4>
+                            <div className="flex gap-3 overflow-x-auto pb-2">
+                              {booking.weather.map((w, idx) => (
+                                <div key={idx} className="flex flex-col items-center min-w-[80px] bg-[rgba(255,255,255,0.04)] p-2 rounded-lg border border-[rgba(255,255,255,0.08)]">
+                                  <img src={`https://openweathermap.org/img/wn/${w.icon}@2x.png`} alt={w.description} className="w-8 h-8" />
+                                  <span className="text-xs text-white mt-1">{new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                                  <span className="text-xs font-medium text-white">{Math.round(w.temp)}°C</span>
+                                  <span className="text-[10px] text-[#a9b1c3] capitalize">{w.description}</span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         )}
                       </div>
-                    </div>
-                  ))
-                )}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </>
           )}
 
-          {/* Discover Tab */}
+          {/* ===================== DISCOVER ===================== */}
           {currentTab === 'discover' && (
-            <>
-              <div className="mb-6 sm:mb-8 pb-4 border-b border-gray-200">
-                <h2 className="text-xl sm:text-2xl md:text-3xl text-gray-800 m-0">Discover Trips</h2>
+            <div>
+              <div className="mb-6">
+                <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white">Discover Trips</h2>
+                <p className="text-[#a9b1c3] text-sm sm:text-base mt-1">Trips available to join — full details shown</p>
               </div>
-              <div className="flex flex-col gap-4 sm:gap-6">
-                {availableTrips.length === 0 ? (
-                  <div className="text-center py-8 sm:py-12 text-gray-600">
-                    <i className="fas fa-search text-4xl sm:text-5xl text-gray-300 mb-4"></i>
-                    <h3 className="text-lg sm:text-xl md:text-2xl mb-2 text-gray-800">No Trips Available</h3>
-                    <p className="mb-4 sm:mb-6 text-sm sm:text-base">
-                      No trips are currently available. Check back later or create your own trip!
-                    </p>
-                    <button
-                      onClick={() => {
-                        setCurrentTab('create');
-                        setIsSidebarOpen(false);
-                      }}
-                      className="px-4 sm:px-6 py-2 sm:py-3 bg-indigo-600 text-white rounded-lg font-semibold text-sm sm:text-base hover:bg-indigo-700 transition-all"
-                    >
-                      Create Trip
-                    </button>
-                  </div>
-                ) : (
-                  availableTrips.map((trip) => (
-                    <div
-                      key={trip._id}
-                      className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden transition-all duration-300 hover:-translate-y-0.5 hover:shadow-2xl"
-                    >
-                      {trip.image && trip.image.trim() && (
-                        <div className="h-48 sm:h-60 overflow-hidden">
-                          <img
-                            src={trip.image}
-                            alt={trip.title}
-                            onError={(e) => (e.target.style.display = 'none')}
-                            className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
-                            loading="lazy"
-                          />
-                        </div>
-                      )}
-                      <div className="p-4 sm:p-6">
-                        <div className="flex flex-col sm:flex-row justify-between items-start mb-4">
-                          <div>
-                            <h3 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800 mb-2">{trip.title}</h3>
-                            <span
-                              className={`px-2 sm:px-3 py-1 rounded-[20px] text-xs font-semibold ${
-                                trip.status === 'upcoming' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
-                              }`}
-                            >
-                              {trip.status}
-                            </span>
+
+              <div className="mb-4">
+                <form onSubmit={handleSearchSubmit} className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Search city or place..."
+                    value={searchQuery}
+                    onChange={handleSearchInput}
+                    className="flex-1 px-4 py-3 bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.12)] rounded-xl text-white placeholder-[#a9b1c3] focus:outline-none focus:border-violet-500"
+                  />
+                  <button type="submit" className="px-4 py-3 bg-gradient-to-br from-violet-600 to-cyan-500 rounded-xl font-semibold hover:scale-105 transition-all">
+                    Search
+                  </button>
+                </form>
+              </div>
+
+              {availableTrips.length === 0 ? (
+                <div className="text-center py-12 bg-[rgba(255,255,255,0.04)] rounded-[22px] border border-[rgba(255,255,255,0.08)]">
+                  <p className="text-[#a9b1c3]">No trips available right now. Check later or create one!</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {availableTrips.map((trip) => {
+                    // detect if user already booked (either from myBookings or trip.bookings list)
+                    const alreadyBooked =
+                      myBookings.some((b) => String(b.tripId || b._id) === String(trip._id)) ||
+                      (trip.bookings || []).some((b) => b.user && String(b.user._id) === String(currentUser?._id));
+
+                    const isFlipped = flipped.has(trip._id);
+
+                    return (
+                      <div key={trip._id} className="discover-card-3d">
+                        <div className={`discover-card-inner ${isFlipped ? 'flipped' : ''}`}>
+                          {/* FRONT SIDE (card content) */}
+                          <div className="discover-card-front bg-[rgba(255,255,255,0.06)] backdrop-blur-xl border border-[rgba(255,255,255,0.1)] rounded-[22px] p-4 sm:p-6 overflow-hidden hover:shadow-[0_18px_60px_rgba(124,58,237,0.12)] transition-all group">
+                            <div className="flex flex-col sm:flex-row gap-4 items-start">
+                              {/* Slightly bigger image (left on desktop, top on mobile) */}
+                              <div className="flex-shrink-0 w-full sm:w-44 sm:max-w-[192px]">
+                                {trip.image ? (
+                                  <img
+                                    src={trip.image}
+                                    alt={trip.title}
+                                    className="w-full h-40 sm:h-full object-cover rounded-lg shadow-[0_8px_24px_rgba(0,0,0,0.45)] block"
+                                  />
+                                ) : (
+                                  <div className="w-full h-40 sm:h-full rounded-lg bg-[rgba(255,255,255,0.02)] flex items-center justify-center text-[#a9b1c3]">
+                                    <i className="fas fa-image text-2xl"></i>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="flex-1 min-w-0 flex flex-col">
+                                <div className="flex items-start justify-between gap-4">
+                                  <div className="min-w-0">
+                                    <h3 className="text-lg sm:text-xl font-bold text-white truncate">{trip.title}</h3>
+                                    <p className="text-[#a9b1c3] text-sm mt-1">{trip.from} → {trip.to}</p>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="text-white font-bold">Rs. {trip.pricePerPerson}/person</div>
+                                    <div className="text-[#a9b1c3] text-sm">{trip.availableSeats} seats left</div>
+                                    <div
+                                      className={`mt-2 px-2 py-1 rounded-full text-xs font-semibold ${
+                                        trip.status === 'upcoming'
+                                          ? 'bg-green-600/90'
+                                          : trip.status === 'ongoing'
+                                          ? 'bg-amber-600/90'
+                                          : trip.status === 'completed'
+                                          ? 'bg-blue-600/90'
+                                          : 'bg-gray-600/90'
+                                      } text-white`}
+                                    >
+                                      {trip.status}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* compact details grid (single date only) */}
+                                <div className="mt-3 text-[#a9b1c3] text-sm grid grid-cols-2 gap-2">
+                                  <div className="flex items-center gap-2"><i className="fas fa-calendar text-cyan-400 w-3"></i><span>{new Date(trip.startDate).toLocaleDateString()} - {new Date(trip.endDate).toLocaleDateString()}</span></div>
+                                  <div className="flex items-center gap-2"><i className={`fas ${getTransportIcon(trip.modeOfTransport)} text-cyan-400 w-3`}></i><span>{trip.modeOfTransport || 'Car'}</span></div>
+                                  <div className="flex items-center gap-2"><i className="fas fa-users text-cyan-400 w-3"></i><span>Booked: {Array.isArray(trip.bookings) ? trip.bookings.length : 0}</span></div>
+                                  <div className="flex items-center gap-2"><i className="fas fa-phone text-cyan-400 w-3"></i><span>{trip.phoneNo || 'N/A'}</span></div>
+                                </div>
+
+                                {/* Weather — scrollable horizontally if long */}
+                                {trip.weather && trip.weather.length > 0 && (
+                                  <div className="mt-3">
+                                    <h4 className="text-sm font-semibold text-white mb-2">Weather Forecast</h4>
+                                    <div className="flex gap-3 overflow-x-auto pb-2 weather-scroll">
+                                      {trip.weather.map((w, idx) => (
+                                        <div key={idx} className="flex flex-col items-center min-w-[90px] bg-[rgba(255,255,255,0.02)] p-2 rounded-md border border-[rgba(255,255,255,0.04)]">
+                                          <img className="w-10 h-10" src={`https://openweathermap.org/img/wn/${w.icon}@2x.png`} alt={w.description} />
+                                          <div className="text-xs text-white mt-1">{Math.round(w.temp)}°C</div>
+                                          <div className="text-[11px] text-[#a9b1c3]">{new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                                          <div className="text-[10px] text-[#a9b1c3] capitalize mt-1">{w.description}</div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* actions */}
+                                <div className="mt-4 flex items-center gap-3">
+                                  <button
+                                    disabled={alreadyBooked || trip.availableSeats <= 0 || trip.status !== 'upcoming'}
+                                    onClick={() => {
+                                      setSelectedTripId(trip._id);
+                                      setShowJoinModal(true);
+                                    }}
+                                    className={`px-4 py-2 rounded-xl font-semibold text-sm transition-all ${
+                                      alreadyBooked || trip.availableSeats <= 0 || trip.status !== 'upcoming'
+                                        ? 'bg-gray-600/60 cursor-not-allowed text-white'
+                                        : 'bg-gradient-to-br from-violet-600 to-cyan-500 text-white hover:scale-105 shadow-[0_6px_16px_rgba(124,58,237,0.45)]'
+                                    }`}
+                                  >
+                                    {alreadyBooked ? 'Already Joined' : trip.availableSeats <= 0 ? 'Full' : 'Join'}
+                                  </button>
+
+                                  <button
+                                    onClick={() => toggleFlip(trip._id)}
+                                    className="px-3 py-2 bg-[rgba(255,255,255,0.04)] text-sm rounded-lg border border-[rgba(255,255,255,0.06)] hover:bg-[rgba(255,255,255,0.06)]"
+                                  >
+                                    View
+                                  </button>
+
+                                  <span className="text-xs text-[#a9b1c3] ml-auto">Owner: <span className="text-white">{trip.createdBy?.email || trip.ownerEmail || 'Host'}</span></span>
+                                </div>
+                              </div>
+                            </div>
                           </div>
-                          <div className="flex gap-2 mt-2 sm:mt-0">
-                            <button
-                              onClick={() => {
-                                setSelectedTripId(trip._id);
-                                setShowJoinModal(true);
-                              }}
-                              className="px-3 sm:px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold text-xs sm:text-sm hover:bg-indigo-700 transition-all flex items-center gap-2"
-                            >
-                              <i className="fas fa-plus"></i> Join Trip
-                            </button>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                          <div className="flex items-center gap-2 text-gray-600 text-sm">
-                            <i className="fas fa-map-marker-alt text-blue-500 w-4"></i>
-                            <span>
-                              {trip.from} → {trip.to}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2 text-gray-600 text-sm">
-                            <i className="fas fa-calendar text-blue-500 w-4"></i>
-                            <span>
-                              {new Date(trip.startDate).toLocaleDateString()} -{' '}
-                              {new Date(trip.endDate).toLocaleDateString()}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2 text-gray-600 text-sm">
-                            <i className="fas fa-users text-blue-500 w-4"></i>
-                            <span>{trip.availableSeats} seats available</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-gray-600 text-sm">
-                            <i className="fas fa-dollar-sign text-blue-500 w-4"></i>
-                            <span>${trip.pricePerPerson} per person</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-gray-600 text-sm">
-                            <i className={`fas ${getTransportIcon(trip.modeOfTransport)} text-blue-500 w-4`}></i>
-                            <span>{trip.modeOfTransport}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-gray-600 text-sm">
-                            <i className="fas fa-user text-blue-500 w-4"></i>
-                            <span>By: {trip.createdBy?.email}</span>
+
+                          {/* BACK SIDE (bigger image view) */}
+                          <div className="discover-card-back bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.04)] rounded-[22px] p-4 sm:p-6 flex items-center justify-center">
+                            <div className="w-full">
+                              <div className="relative">
+                                {trip.image ? (
+                                  <img src={trip.image} alt={trip.title} className="w-full h-56 sm:h-72 object-cover rounded-[16px] shadow-[0_10px_30px_rgba(0,0,0,0.6)]" />
+                                ) : (
+                                  <div className="w-full h-56 sm:h-72 flex items-center justify-center bg-[rgba(255,255,255,0.02)] rounded-[16px]">
+                                    <i className="fas fa-image text-3xl text-[#a9b1c3]"></i>
+                                  </div>
+                                )}
+
+                                <button
+                                  onClick={() => toggleFlip(trip._id)}
+                                  className="absolute top-3 right-3 bg-[rgba(15,18,32,0.6)] text-white px-3 py-1 rounded-lg border border-[rgba(255,255,255,0.06)]"
+                                >
+                                  Close
+                                </button>
+
+                                <div className="mt-3 text-left">
+                                  <h3 className="text-lg font-bold text-white">{trip.title}</h3>
+                                  <p className="text-xs text-[#a9b1c3]">Owner: <span className="text-white">{trip.createdBy?.email || trip.ownerEmail || 'Host'}</span></p>
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           )}
 
-          {/* Create Trip Tab */}
+          {/* ===================== CREATE ===================== */}
           {currentTab === 'create' && (
-            <>
-              <div className="mb-6 sm:mb-8 pb-4 border-b border-gray-200">
-                <h2 className="text-xl sm:text-2xl md:text-3xl text-gray-800 m-0">Create New Trip</h2>
-              </div>
-              <form
-                onSubmit={handleTripCreation}
-                className="bg-white rounded-2xl p-4 sm:p-6 md:p-8 shadow-lg max-w-full sm:max-w-[800px]"
-              >
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
-                  <div>
-                    <label className="block mb-2 font-semibold text-gray-800 text-sm sm:text-base">Trip Title</label>
-                    <input
-                      type="text"
-                      name="title"
-                      required
-                      className="w-full px-3 py-3 border border-gray-300 rounded-lg text-sm sm:text-base transition-colors focus:outline-none focus:border-indigo-600"
-                    />
+            <div className="bg-[rgba(255,255,255,0.06)] backdrop-blur-xl rounded-[22px] border border-[rgba(255,255,255,0.1)] p-6 sm:p-8 shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
+              <h2 className="text-xl sm:text-2xl font-bold text-white mb-4">Create Trip</h2>
+              <form onSubmit={handleTripCreation} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="block font-semibold text-white text-sm sm:text-base">Title</label>
+                    <input name="title" required className="w-full px-4 py-3 bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.12)] rounded-xl text-white placeholder-[#a9b1c3] focus:outline-none" />
                   </div>
-                  <div>
-                    <label className="block mb-2 font-semibold text-gray-800 text-sm sm:text-base">Mode of Transport</label>
-                    <select
-                      name="modeOfTransport"
-                      required
-                      className="w-full px-3 py-3 border border-gray-300 rounded-lg text-sm sm:text-base transition-colors focus:outline-none focus:border-indigo-600"
-                    >
-                      <option value="">Select Transport</option>
-                      <option value="bus">Bus</option>
-                      <option value="railway">Railway</option>
-                      <option value="airplane">Airplane</option>
-                      <option value="car">Car</option>
-                    </select>
+                  <div className="space-y-2">
+                    <label className="block font-semibold text-white text-sm sm:text-base">From</label>
+                    <input name="from" required className="w-full px-4 py-3 bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.12)] rounded-xl text-white" />
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
-                  <div>
-                    <label className="block mb-2 font-semibold text-gray-800 text-sm sm:text-base">From</label>
-                    <input
-                      type="text"
-                      name="from"
-                      required
-                      className="w-full px-3 py-3 border border-gray-300 rounded-lg text-sm sm:text-base transition-colors focus:outline-none focus:border-indigo-600"
-                    />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="block font-semibold text-white text-sm sm:text-base">To</label>
+                    <input name="to" required className="w-full px-4 py-3 bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.12)] rounded-xl text-white" />
                   </div>
-                  <div>
-                    <label className="block mb-2 font-semibold text-gray-800 text-sm sm:text-base">To</label>
-                    <input
-                      type="text"
-                      name="to"
-                      required
-                      className="w-full px-3 py-3 border border-gray-300 rounded-lg text-sm sm:text-base transition-colors focus:outline-none focus:border-indigo-600"
-                    />
+                  <div className="space-y-2">
+                    <label className="block font-semibold text-white text-sm sm:text-base">Image (URL)</label>
+                    <input name="image" className="w-full px-4 py-3 bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.12)] rounded-xl text-white" />
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
-                  <div>
-                    <label className="block mb-2 font-semibold text-gray-800 text-sm sm:text-base">Start Date</label>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="block font-semibold text-white text-sm sm:text-base">Start Date</label>
                     <input
                       type="datetime-local"
                       name="startDate"
                       required
                       min={new Date().toISOString().slice(0, 16)}
-                      className="w-full px-3 py-3 border border-gray-300 rounded-lg text-sm sm:text-base transition-colors focus:outline-none focus:border-indigo-600"
+                      className="w-full px-4 py-3 bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.12)] rounded-xl text-white"
                     />
                   </div>
-                  <div>
-                    <label className="block mb-2 font-semibold text-gray-800 text-sm sm:text-base">End Date</label>
+                  <div className="space-y-2">
+                    <label className="block font-semibold text-white text-sm sm:text-base">End Date</label>
                     <input
                       type="datetime-local"
                       name="endDate"
                       required
                       min={new Date().toISOString().slice(0, 16)}
-                      className="w-full px-3 py-3 border border-gray-300 rounded-lg text-sm sm:text-base transition-colors focus:outline-none focus:border-indigo-600"
+                      className="w-full px-4 py-3 bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.12)] rounded-xl text-white"
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block mb-2 font-semibold text-gray-800 text-sm sm:text-base">Available Seats</label>
-                    <input
-                      type="number"
-                      name="seats"
-                      min="1"
-                      required
-                      className="w-full px-3 py-3 border border-gray-300 rounded-lg text-sm sm:text-base transition-colors focus:outline-none focus:border-indigo-600"
-                    />
+                    <label className="block font-semibold text-white text-sm sm:text-base">Available Seats</label>
+                    <input name="seats" type="number" min="1" required className="w-full px-4 py-3 bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.12)] rounded-xl text-white" />
                   </div>
                   <div>
-                    <label className="block mb-2 font-semibold text-gray-800 text-sm sm:text-base">Price per Person</label>
-                    <input
-                      type="number"
-                      name="pricePerPerson"
-                      min="0"
-                      max="100000"
-                      step="0.01"
-                      required
-                      className="w-full px-3 py-3 border border-gray-300 rounded-lg text-sm sm:text-base transition-colors focus:outline-none focus:border-indigo-600"
-                    />
+                    <label className="block font-semibold text-white text-sm sm:text-base">Price per Person</label>
+                    <input name="pricePerPerson" type="number" min="0" step="0.01" required className="w-full px-4 py-3 bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.12)] rounded-xl text-white" />
                   </div>
                 </div>
-                <div className="mb-4 sm:mb-6">
-                  <label className="block mb-2 font-semibold text-gray-800 text-sm sm:text-base">Phone Number</label>
-                  <input
-                    type="tel"
-                    name="phoneNo"
-                    required
-                    className="w-full px-3 py-3 border border-gray-300 rounded-lg text-sm sm:text-base transition-colors focus:outline-none focus:border-indigo-600"
-                  />
+
+                <div>
+                  <label className="block font-semibold text-white text-sm sm:text-base">Phone Number</label>
+                  <input name="phoneNo" type="tel" required className="w-full px-4 py-3 bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.12)] rounded-xl text-white" />
                 </div>
-                <div className="mb-4 sm:mb-6">
-                  <label className="block mb-2 font-semibold text-gray-800 text-sm sm:text-base">Image URL (Optional)</label>
-                  <input
-                    type="url"
-                    name="image"
-                    placeholder="https://example.com/image.jpg"
-                    className="w-full px-3 py-3 border border-gray-300 rounded-lg text-sm sm:text-base transition-colors focus:outline-none focus:border-indigo-600"
-                  />
-                  <small className="block mt-1 text-xs text-gray-600 italic">
-                    Leave empty if you don't have an image
-                  </small>
+
+                <div className="flex items-center justify-end gap-2">
+                  <button type="submit" className="px-6 py-3 bg-gradient-to-br from-violet-600 to-cyan-500 text-white rounded-xl font-semibold hover:scale-105 transition-all">
+                    Create Trip
+                  </button>
                 </div>
-                <button
-                  type="submit"
-                  className="w-full px-4 py-3 sm:py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg text-sm sm:text-base font-semibold transition-all hover:from-indigo-700 hover:to-purple-700 hover:-translate-y-0.5"
-                >
-                  Create Trip
-                </button>
               </form>
-            </>
+            </div>
           )}
         </div>
       </main>
 
-      {/* Join Trip Modal */}
-      {showJoinModal && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10000] p-4"
-          onClick={() => setShowJoinModal(false)}
-        >
-          <div
-            className="bg-white rounded-2xl p-4 sm:p-6 md:p-8 max-w-md w-full sm:w-[90%]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-center mb-4 sm:mb-6 pb-4 border-b border-gray-200">
-              <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-800 m-0">Join Trip</h3>
-              <button
-                onClick={() => setShowJoinModal(false)}
-                className="text-xl sm:text-2xl text-gray-600 hover:text-gray-800 border-none bg-transparent cursor-pointer"
-              >
-                &times;
-              </button>
+      {/* Join modal */}
+      {showJoinModal && selectedTripId && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[10000] p-4" onClick={() => setShowJoinModal(false)}>
+          <div className="bg-[rgba(255,255,255,0.06)] backdrop-blur-xl border border-[rgba(255,255,255,0.1)] rounded-[22px] p-4 sm:p-6 md:p-8 max-w-md w-full sm:w-[90%] shadow-[0_10px_30px_rgba(0,0,0,0.35)]" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4 sm:mb-6 pb-4 border-b border-[rgba(255,255,255,0.1)]">
+              <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-white m-0">Join Trip</h3>
+              <button onClick={() => setShowJoinModal(false)} className="text-xl sm:text-2xl text-[#a9b1c3] hover:text-white border-none bg-transparent cursor-pointer">&times;</button>
             </div>
+
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                const seatsBooked = e.target.seatsBooked.value;
-                handleJoinTrip(seatsBooked);
+                const seats = e.target.seatsBooked.value;
+                handleJoinTrip(seats);
               }}
             >
-              <div className="mb-4 sm:mb-6">
-                <label className="block mb-2 font-semibold text-gray-800 text-sm sm:text-base">Number of Seats</label>
-                <input
-                  type="number"
-                  name="seatsBooked"
-                  min="1"
-                  required
-                  className="w-full px-3 py-3 border border-gray-300 rounded-lg text-sm sm:text-base transition-colors focus:outline-none focus:border-indigo-600"
-                />
+              <div className="space-y-2 mb-4 sm:mb-6">
+                <label className="block font-semibold text-white text-sm sm:text-base">Number of Seats</label>
+                <input type="number" name="seatsBooked" min="1" defaultValue="1" required className="w-full px-4 py-3 bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.12)] rounded-xl text-white placeholder-[#a9b1c3]" />
               </div>
-              <button
-                type="submit"
-                className="w-full px-4 py-3 sm:py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg text-sm sm:text-base font-semibold transition-all hover:from-indigo-700 hover:to-purple-700"
-              >
-                Join Trip
+
+              <button type="submit" className="w-full px-4 py-3 sm:py-4 bg-gradient-to-br from-violet-600 to-cyan-500 text-white rounded-xl text-sm sm:text-base font-semibold transition-all hover:scale-105 shadow-[0_10px_24px_rgba(124,58,237,0.35)]">
+                Proceed to Pay
               </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* Search Results Modal */}
+      {/* Search results modal */}
       {showSearchModal && searchResults && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10000] overflow-y-auto p-4"
-          onClick={() => {
-            setShowSearchModal(false);
-            setSearchResults(null);
-            setSearchQuery('');
-          }}
-        >
-          <div
-            className="bg-white rounded-2xl p-4 sm:p-6 md:p-8 max-w-4xl w-full sm:w-[90%] max-h-[90vh] overflow-y-auto my-4 sm:my-8"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-center mb-4 sm:mb-6 pb-4 border-b border-gray-200 sticky top-0 bg-white z-10">
-              <div>
-                <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-800 m-0">
-                  Search Results for "{searchResults.city}"
-                </h3>
-                <p className="text-xs sm:text-sm text-gray-600 mt-1">
-                  Found {searchResults.places.length} place{searchResults.places.length !== 1 ? 's' : ''}
-                </p>
-              </div>
-              <button
-                onClick={() => {
-                  setShowSearchModal(false);
-                  setSearchResults(null);
-                  setSearchQuery('');
-                }}
-                className="text-xl sm:text-2xl md:text-3xl text-gray-600 hover:text-gray-800 border-none bg-transparent cursor-pointer leading-none p-2 hover:bg-gray-100 rounded-full w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center transition-all"
-                aria-label="Close"
-              >
-                &times;
-              </button>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[10000] overflow-y-auto p-4" onClick={() => { setShowSearchModal(false); setSearchResults(null); setSearchQuery(''); }}>
+          <div className="bg-[rgba(255,255,255,0.06)] backdrop-blur-xl border border-[rgba(255,255,255,0.1)] rounded-[22px] p-4 sm:p-6 md:p-8 max-w-4xl w-full sm:w-[90%] max-h-[90vh] overflow-y-auto my-4 sm:my-8 shadow-[0_10px_30px_rgba(0,0,0,0.35)]" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4 sm:mb-6 pb-4 border-b border-[rgba(255,255,255,0.1)] sticky top-0 bg-[rgba(15,18,32,0.95)] z-10">
+              <h3 className="text-lg sm:text-xl font-bold text-white m-0">Search results — {searchResults.city}</h3>
+              <button onClick={() => { setShowSearchModal(false); setSearchResults(null); setSearchQuery(''); }} className="text-xl sm:text-2xl text-[#a9b1c3] hover:text-white">&times;</button>
             </div>
-            <div className="space-y-4">
-              {searchResults.places.length === 0 ? (
-                <div className="text-center py-6 sm:py-8 text-gray-600">
-                  <i className="fas fa-search text-3xl sm:text-4xl text-gray-300 mb-4"></i>
-                  <p className="text-sm sm:text-base">No places found for "{searchResults.city}"</p>
-                </div>
-              ) : (
-                searchResults.places.map((place, index) => (
-                  <div
-                    key={index}
-                    className="flex gap-3 sm:gap-4 p-3 sm:p-4 border border-gray-200 rounded-xl hover:shadow-lg transition-all hover:border-indigo-300 bg-white cursor-pointer"
-                    onClick={() => {
-                      setSearchQuery(place.name);
-                      setShowSearchModal(false);
-                      setCurrentTab('discover');
-                      setIsSidebarOpen(false);
-                    }}
-                  >
-                    <div className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 shrink-0 rounded-lg overflow-hidden bg-gray-100 border border-gray-200">
-                      {place.image ? (
-                        <img
-                          src={place.image}
-                          alt={place.name}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            e.target.style.display = 'none';
-                            const parent = e.target.parentElement;
-                            if (parent && !parent.querySelector('.no-image-placeholder')) {
-                              const placeholder = document.createElement('div');
-                              placeholder.className =
-                                'no-image-placeholder w-full h-full flex items-center justify-center text-gray-400 text-xs flex-col';
-                              placeholder.innerHTML =
-                                '<i class="fas fa-image text-lg sm:text-xl md:text-2xl mb-1"></i><span>No Image</span>';
-                              parent.appendChild(placeholder);
-                            }
-                          }}
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs flex-col">
-                          <i className="fas fa-image text-lg sm:text-xl md:text-2xl mb-1"></i>
-                          <span>No Image</span>
-                        </div>
-                      )}
+
+            <div className="space-y-3">
+              {searchResults.places.map((place, idx) => (
+                <div key={idx} className="flex gap-3 items-center bg-[rgba(255,255,255,0.03)] p-3 rounded-lg border border-[rgba(255,255,255,0.06)]">
+                  {place.image ? (
+                    <img src={place.image} alt={place.name} className="w-20 h-14 object-cover rounded-md flex-shrink-0" />
+                  ) : (
+                    <div className="w-20 h-14 rounded-md bg-[rgba(255,255,255,0.02)] flex items-center justify-center text-[#a9b1c3]">
+                      <i className="fas fa-image"></i>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-semibold text-base sm:text-lg text-gray-800 mb-1 sm:mb-2 truncate">{place.name}</h4>
-                      <p className="text-xs sm:text-sm text-gray-600 mb-1 sm:mb-2 line-clamp-2">{place.address}</p>
+                  )}
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-sm font-semibold text-white">{place.name}</h4>
+                        <p className="text-xs text-[#a9b1c3]">{place.address}</p>
+                      </div>
                       {place.rating && (
-                        <div className="flex items-center gap-1 text-amber-500 font-semibold text-xs sm:text-sm">
+                        <div className="flex items-center gap-1 text-amber-500 font-semibold text-xs">
                           <i className="fas fa-star"></i>
                           <span>{place.rating.toFixed(1)}</span>
-                          <span className="text-gray-400 text-xs ml-1">/ 5.0</span>
+                          <span className="text-[#a9b1c3] text-xs ml-1">/ 5</span>
                         </div>
                       )}
                     </div>
                   </div>
-                ))
-              )}
+                </div>
+              ))}
             </div>
           </div>
         </div>
       )}
 
+      {/* Inline styles & small animations */}
       <style>{`
-        @keyframes slideIn {
-          from {
-            transform: translateX(100%);
-            opacity: 0;
-          }
-          to {
-            transform: translateX(0);
-            opacity: 1;
-          }
+        @keyframes bounceIn {
+          0% { transform: scale(0.3); opacity: 0; }
+          50% { transform: scale(1.05); }
+          70% { transform: scale(0.9); }
+          100% { transform: scale(1); opacity: 1; }
         }
-        @keyframes float {
-          0%, 100% {
-            transform: translateY(0px) rotate(0deg);
-          }
-          50% {
-            transform: translateY(-20px) rotate(180deg);
-          }
+        .animate-bounceIn { animation: bounceIn 0.6s ease-out; }
+
+        /* 3D flip container */
+        .discover-card-3d { perspective: 1200px; }
+        .discover-card-inner { transition: transform 0.6s; transform-style: preserve-3d; position: relative; }
+        .discover-card-inner.flipped { transform: rotateY(180deg); }
+        .discover-card-front, .discover-card-back {
+          backface-visibility: hidden;
+          -webkit-backface-visibility: hidden;
         }
-        .animate-slideIn {
-          animation: slideIn 0.4s ease;
+        .discover-card-back { transform: rotateY(180deg); position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+
+        /* Weather scroll niceties */
+        .weather-scroll { -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+        .weather-scroll::-webkit-scrollbar { height: 8px; }
+        .weather-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 8px; }
+
+        /* responsive adjustments */
+        @media (min-width: 640px) {
+          .discover-card-back, .discover-card-front { min-height: 160px; }
         }
-        .animate-float {
-          animation: float 6s ease-in-out infinite;
+        @media (max-width: 639px) {
+          /* stack image on top naturally handled by flex-col on small screens */
         }
-        .line-clamp-2 {
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-        }
-        /* Ensure sidebar doesn't overlap content when open */
-        @media (max-width: 640px) {
-          body:has(.translate-x-0) {
-            overflow: hidden;
-          }
-        }
+
+        .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+        select { appearance: none; -webkit-appearance: none; -moz-appearance: none; padding-right: 2.5rem;
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23a9b1c3'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+          background-repeat: no-repeat; background-position: right 1rem center; background-size: 1.2rem; }
       `}</style>
     </div>
   );
