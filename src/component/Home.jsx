@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import ChatWidget from './Chat';
 
 export default function Home() {
   const [text, setText] = useState("");
@@ -245,7 +246,8 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#0f1220] text-white font-['Poppins',system-ui,sans-serif] overflow-x-hidden">
-
+      <div>
+      </div>
       {/* PARTICLE CANVAS */}
       <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none z-0 opacity-60" />
 
@@ -539,4 +541,4 @@ export default function Home() {
       `}</style>
     </div>
   );
-}
+} 

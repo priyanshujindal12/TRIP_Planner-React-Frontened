@@ -56,3 +56,23 @@ The React Compiler is not enabled on this template because of its impact on dev 
 ## Expanding the ESLint configuration
 
 If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+// Dashboard.jsx
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import '@fortawesome/fontawesome-free/css/all.min.css';
+
+/**
+ * Dashboard.jsx
+ *
+ * - Matches Admin.jsx particle/canvas background and theme
+ * - Preserves existing features:
+ *    - Load user's trips/bookings
+ *    - Razorpay join flow
+ *    - Cancel trip/booking
+ *    - Search / discover trips
+ *    - Tabs, modals, navigation
+ * - Accept / Reject booking UI for trip creators
+ * - Discover card: slightly bigger image, removed "Details" button,
+ *   shows all weather days (scrollable) and "Created by"
+ * - Discover card date shows both Start and End dates: "FromDate - ToDate"
+ */

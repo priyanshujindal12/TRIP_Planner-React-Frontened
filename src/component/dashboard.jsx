@@ -2,13 +2,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '@fortawesome/fontawesome-free/css/all.min.css';
-
-
-
+import ChatWidget from './Chat';
 const Dashboard = () => {
   const navigate = useNavigate();
-
-  /* ===================== STATE ===================== */
   const [currentUser, setCurrentUser] = useState(null);
   const [currentTab, setCurrentTab] = useState('overview');
   const [myTrips, setMyTrips] = useState([]);
@@ -29,14 +25,10 @@ const Dashboard = () => {
   });
   const [activeFilter, setActiveFilter] = useState({ trips: 'all', bookings: 'all' });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
-  // track flipped cards for "View" flip
+  const [openTripId, setOpenTripId] = useState(null);
   const [flipped, setFlipped] = useState(() => new Set());
 
-  const API_BASE = 'https://trip-planner-backend-y5v9.onrender.com'; // adjust to your API base if different
-
-  /* ===================== HELPERS ===================== */
-
+  const API_BASE = 'https://trip-planner-backend-y5v9.onrender.com';
   const decodeToken = useCallback(() => {
     try {
       const token = localStorage.getItem('token');
@@ -292,7 +284,6 @@ const Dashboard = () => {
 
   /* ===================== CANCEL ===================== */
   const cancelTrip = async (tripId) => {
-    if (!window.confirm('Are you sure you want to cancel this trip?')) return;
     try {
       const response = await fetchWithAuth(`${API_BASE}/trips/${tripId}/cancel`, {
         method: 'POST',
@@ -311,7 +302,6 @@ const Dashboard = () => {
   };
 
   const cancelBooking = async (bookingId) => {
-    if (!window.confirm('Are you sure you want to cancel this booking?')) return;
     try {
       const response = await fetchWithAuth(`${API_BASE}/trips/${bookingId}/cancel-booking`, {
         method: 'POST',
@@ -585,6 +575,7 @@ const Dashboard = () => {
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#0f1220] text-white font-['Poppins',system-ui,sans-serif]">
       {/* Particle background canvas */}
+
       <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none z-0 opacity-60" />
 
       {/* Notifications */}
@@ -592,26 +583,24 @@ const Dashboard = () => {
         {notifications.map((notif) => (
           <div
             key={notif.id}
-            className={`flex items-center gap-3 px-4 py-3 sm:px-6 sm:py-4 rounded-xl shadow-2xl backdrop-blur-xl border border-white/10 text-white animate-bounceIn ${
-              notif.type === 'success'
+            className={`flex items-center gap-3 px-4 py-3 sm:px-6 sm:py-4 rounded-xl shadow-2xl backdrop-blur-xl border border-white/10 text-white animate-bounceIn ${notif.type === 'success'
                 ? 'bg-green-600/90'
                 : notif.type === 'warning'
-                ? 'bg-amber-600/90'
-                : notif.type === 'error'
-                ? 'bg-red-600/90'
-                : 'bg-violet-600/90'
-            }`}
+                  ? 'bg-amber-600/90'
+                  : notif.type === 'error'
+                    ? 'bg-red-600/90'
+                    : 'bg-violet-600/90'
+              }`}
           >
             <i
-              className={`fas fa-${
-                notif.type === 'success'
+              className={`fas fa-${notif.type === 'success'
                   ? 'check-circle'
                   : notif.type === 'warning'
-                  ? 'exclamation-triangle'
-                  : notif.type === 'error'
-                  ? 'times-circle'
-                  : 'info-circle'
-              }`}
+                    ? 'exclamation-triangle'
+                    : notif.type === 'error'
+                      ? 'times-circle'
+                      : 'info-circle'
+                }`}
             />
             <span className="text-sm sm:text-base">{notif.message}</span>
             <button
@@ -627,9 +616,8 @@ const Dashboard = () => {
 
       {/* Sidebar */}
       <nav
-        className={`fixed top-0 left-0 h-screen w-64 sm:w-72 bg-[rgba(255,255,255,0.06)] backdrop-blur-xl border-r border-[rgba(255,255,255,0.1)] z-[1000] shadow-[0_10px_30px_rgba(0,0,0,0.35)] flex flex-col transition-transform duration-300 ${
-          isSidebarOpen ? 'translate-x-0' : '-translate-x-full sm:translate-x-0'
-        }`}
+        className={`fixed top-0 left-0 h-screen w-64 sm:w-72 bg-[rgba(255,255,255,0.06)] backdrop-blur-xl border-r border-[rgba(255,255,255,0.1)] z-[1000] shadow-[0_10px_30px_rgba(0,0,0,0.35)] flex flex-col transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full sm:translate-x-0'
+          }`}
       >
         <div className="p-4 sm:p-6 border-b border-[rgba(255,255,255,0.1)] flex items-center justify-between">
           <div
@@ -670,11 +658,10 @@ const Dashboard = () => {
                     setCurrentTab(item.id);
                     if (window.innerWidth < 640) setIsSidebarOpen(false);
                   }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${
-                    currentTab === item.id
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${currentTab === item.id
                       ? 'bg-gradient-to-br from-violet-600 to-cyan-500 text-white shadow-[0_10px_24px_rgba(124,58,237,0.35)]'
                       : 'text-[#a9b1c3] hover:bg-[rgba(255,255,255,0.08)] hover:text-white'
-                  }`}
+                    }`}
                 >
                   <i className={`fas ${item.icon} w-5`}></i>
                   <span className="font-medium">{item.label}</span>
@@ -779,9 +766,8 @@ const Dashboard = () => {
                         <p className="text-[#a9b1c3] text-sm truncate">{booking.from} → {booking.to}</p>
                       </div>
                       <span
-                        className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          booking.status === 'upcoming' ? 'bg-green-600/90 text-white' : 'bg-gray-600/90 text-white'
-                        }`}
+                        className={`px-3 py-1 rounded-full text-xs font-semibold ${booking.status === 'upcoming' ? 'bg-green-600/90 text-white' : 'bg-gray-600/90 text-white'
+                          }`}
                       >
                         {booking.status}
                       </span>
@@ -793,18 +779,21 @@ const Dashboard = () => {
             </>
           )}
 
-          {/* ===================== MY TRIPS ===================== */}
           {currentTab === 'trips' && (
             <>
               <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                  <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white m-0 [text-shadow:2px_2px_8px_rgba(0,0,0,0.7)]">My Trips</h2>
+                  <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white m-0 [text-shadow:2px_2px_8px_rgba(0,0,0,0.7)]">
+                    My Trips
+                  </h2>
                   <p className="text-[#a9b1c3] text-sm sm:text-base mt-1">Trips you've created</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <select
                     value={activeFilter.trips}
-                    onChange={(e) => setActiveFilter((prev) => ({ ...prev, trips: e.target.value }))}
+                    onChange={(e) =>
+                      setActiveFilter((prev) => ({ ...prev, trips: e.target.value }))
+                    }
                     className="px-3 py-2 bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.12)] rounded-xl text-white text-sm focus:outline-none focus:border-violet-500"
                   >
                     <option value="all" className="bg-[#0f1220] text-white">All Trips</option>
@@ -828,111 +817,170 @@ const Dashboard = () => {
                   </button>
                 </div>
               ) : (
-                <div className="space-y-4 sm:space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                   {getFilteredTrips().map((trip) => (
-                    <div key={trip._id} className="bg-[rgba(255,255,255,0.06)] backdrop-blur-xl border border-[rgba(255,255,255,0.1)] rounded-[22px] p-4 sm:p-6 overflow-hidden hover:shadow-[0_15px_40px_rgba(124,58,237,0.25)] transition-all group">
+                    <div
+                      key={trip._id}
+                      className="relative bg-[rgba(255,255,255,0.06)] backdrop-blur-xl border border-[rgba(255,255,255,0.1)]
+                      rounded-2xl p-4 transition-all duration-300 hover:scale-[1.02]
+                      hover:shadow-[0_10px_30px_rgba(0,0,0,0.3)]"
+                    >
+                      {/* Trip Image */}
                       {trip.image && (
                         <img
                           src={trip.image}
                           alt={trip.title}
-                          className="w-full h-40 sm:h-48 object-cover rounded-xl mb-4 sm:mb-6 group-hover:scale-105 transition-transform duration-300"
+                          className="w-full h-36 object-cover rounded-xl mb-3"
                         />
                       )}
 
-                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                        <div className="flex-1">
-                          <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-white mb-2 truncate">{trip.title}</h3>
-                          <div className="flex items-center gap-2 mb-3 sm:mb-4">
-                            <span
-                              className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                                trip.status === 'upcoming'
-                                  ? 'bg-green-600/90'
-                                  : trip.status === 'ongoing'
-                                  ? 'bg-amber-600/90'
-                                  : trip.status === 'completed'
-                                  ? 'bg-blue-600/90'
-                                  : 'bg-gray-600/90'
-                              } text-white`}
-                            >
-                              {trip.status}
-                            </span>
-                          </div>
-                          <div className="flex gap-2 mt-2 sm:mt-0">
-                            <button
-                              onClick={() => cancelTrip(trip._id)}
-                              disabled={!isTripCancelable(trip)}
-                              className={`px-3 sm:px-4 py-2 ${isTripCancelable(trip) ? 'bg-red-600/90 hover:bg-red-700' : 'bg-gray-600/60 cursor-not-allowed'} text-white rounded-xl font-semibold text-xs sm:text-sm transition-all flex items-center gap-2`}
-                            >
-                              <i className="fas fa-times"></i> Cancel
-                            </button>
-                          </div>
+                      {/* Trip Title & Status */}
+                      <div className="flex justify-between items-center mb-2">
+                        <h3 className="text-lg font-semibold text-white truncate">{trip.title}</h3>
+                        <span
+                          className={`px-2 py-1 text-xs font-semibold rounded-full ${trip.status === "upcoming"
+                              ? "bg-green-600/80"
+                              : trip.status === "ongoing"
+                                ? "bg-amber-600/80"
+                                : trip.status === "completed"
+                                  ? "bg-blue-600/80"
+                                  : "bg-gray-600/80"
+                            } text-white`}
+                        >
+                          {trip.status}
+                        </span>
+                      </div>
+
+                      {/* Basic Info */}
+                      <div className="text-sm text-[#a9b1c3] space-y-1 mb-3">
+                        <div className="flex items-center gap-2">
+                          <i className="fas fa-map-marker-alt text-cyan-400 w-4"></i>
+                          {trip.from} → {trip.to}
                         </div>
-                        <div className="flex flex-col items-end gap-2 text-sm sm:text-base">
-                          <span className="text-white font-bold">${trip.pricePerPerson}/person</span>
-                          <span className="text-[#a9b1c3]">{trip.availableSeats} seats left</span>
+                        <div className="flex items-center gap-2">
+                          <i className="fas fa-calendar text-cyan-400 w-4"></i>
+                          {new Date(trip.startDate).toLocaleDateString()} -{" "}
+                          {new Date(trip.endDate).toLocaleDateString()}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <i className={`fas ${getTransportIcon(trip.modeOfTransport)} text-cyan-400 w-4`} />
+                          {trip.modeOfTransport || "Car"}
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-4 text-[#a9b1c3] text-sm">
-                        <div className="flex items-center gap-2"><i className="fas fa-map-marker-alt text-cyan-400 w-4"></i><span>{trip.from} → {trip.to}</span></div>
-                        <div className="flex items-center gap-2"><i className="fas fa-calendar text-cyan-400 w-4"></i><span>{new Date(trip.startDate).toLocaleDateString()} - {new Date(trip.endDate).toLocaleDateString()}</span></div>
-                        <div className="flex items-center gap-2"><i className="fas fa-users text-cyan-400 w-4"></i><span>Booked: {Array.isArray(trip.bookings) ? trip.bookings.length : 0}</span></div>
-                        <div className="flex items-center gap-2"><i className={`fas ${getTransportIcon(trip.modeOfTransport)} text-cyan-400 w-4`} /><span>{trip.modeOfTransport || 'Car'}</span></div>
+                      {/* Price & Seats */}
+                      <div className="flex justify-between items-center text-sm border-t border-[rgba(255,255,255,0.08)] pt-2">
+                        <span className="text-white font-bold">₹{trip.pricePerPerson}/person</span>
+                        <span className="text-[#a9b1c3]">{trip.availableSeats} seats left</span>
                       </div>
 
-                      {/* Weather */}
-                      {trip.weather && trip.weather.length > 0 ? (
-                        <div className="mt-4 p-3 bg-[rgba(255,255,255,0.04)] rounded-xl border border-[rgba(255,255,255,0.08)]">
-                          <h4 className="text-sm font-semibold text-white mb-2">Weather Forecast</h4>
-                          <div className="flex gap-3 overflow-x-auto pb-2">
-                            {trip.weather.map((w, index) => (
-                              <div key={index} className="flex flex-col items-center min-w-[80px] bg-[rgba(255,255,255,0.04)] p-2 rounded-lg border border-[rgba(255,255,255,0.08)]">
-                                <img src={`https://openweathermap.org/img/wn/${w.icon}@2x.png`} alt={w.description} className="w-8 h-8" />
-                                <span className="text-xs text-white mt-1">{new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                                <span className="text-xs font-medium text-white">{Math.round(w.temp)}°C</span>
-                                <span className="text-[10px] text-[#a9b1c3] capitalize">{w.description}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="mt-4 text-sm text-[#a9b1c3]">Forecast not available</p>
-                      )}
+                      {/* Action Buttons */}
+                      <div className="flex justify-between items-center mt-3">
+                        <button
+                          onClick={() => cancelTrip(trip._id)}
+                          disabled={!isTripCancelable(trip)}
+                          className={`text-xs font-semibold px-3 py-1.5 rounded-xl flex items-center gap-2 ${isTripCancelable(trip)
+                              ? "bg-red-600/90 hover:bg-red-700 text-white"
+                              : "bg-gray-600/50 text-gray-400 cursor-not-allowed"
+                            } transition-all`}
+                        >
+                          <i className="fas fa-times"></i> Cancel
+                        </button>
 
-                      {/* Bookings list (author can accept/reject only when trip is upcoming) */}
-                      {Array.isArray(trip.bookings) && trip.bookings.length > 0 && (
-                        <div className="mt-4 pt-4 border-t border-[rgba(255,255,255,0.1)]">
-                          <h4 className="text-sm font-semibold text-white mb-3">Bookings</h4>
-                          <div className="space-y-2 max-h-40 overflow-y-auto">
-                            {trip.bookings.map((booking) => (
-                              <div key={booking._id} className="flex items-center justify-between p-2 bg-[rgba(255,255,255,0.04)] rounded-lg border border-[rgba(255,255,255,0.08)]">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 bg-[rgba(255,255,255,0.03)] rounded-full flex items-center justify-center">
-                                    <i className="fas fa-user text-xs text-[#a9b1c3]"></i>
+                        {/* Toggle Details */}
+                        <button
+                          onClick={() =>
+                            setOpenTripId((prev) => (prev === trip._id ? null : trip._id))
+                          }
+                          className="text-xs text-cyan-400 hover:text-cyan-300"
+                        >
+                          <i
+                            className={`fas ${openTripId === trip._id ? "fa-chevron-up" : "fa-chevron-down"
+                              }`}
+                          ></i>{" "}
+                          Details
+                        </button>
+                      </div>
+
+                      {/* Expanded Section (Weather + Bookings) */}
+                      {openTripId === trip._id && (
+                        <div className="mt-3 space-y-3 bg-[rgba(255,255,255,0.04)] p-3 rounded-xl border border-[rgba(255,255,255,0.08)] text-xs text-[#a9b1c3]">
+                          {/* Weather */}
+                          {trip.weather?.length > 0 ? (
+                            <div>
+                              <h4 className="text-white font-medium mb-1">Weather Forecast</h4>
+                              <div className="flex gap-2 overflow-x-auto pb-1">
+                                {trip.weather.map((w, i) => (
+                                  <div
+                                    key={i}
+                                    className="flex flex-col items-center min-w-[60px] bg-[rgba(255,255,255,0.05)] p-1.5 rounded-lg"
+                                  >
+                                    <img
+                                      src={`https://openweathermap.org/img/wn/${w.icon}@2x.png`}
+                                      alt={w.description}
+                                      className="w-6 h-6"
+                                    />
+                                    <span>{Math.round(w.temp)}°C</span>
                                   </div>
-                                  <div className="text-xs text-[#a9b1c3]">{booking.user?.email || booking.userEmail || 'User'}</div>
-                                </div>
-
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs text-white">{booking.seatsBooked} seats</span>
-                                  <span className={`px-2 py-1 rounded-full text-[10px] font-semibold ${booking.status === 'accepted' ? 'bg-green-600/90 text-white' : booking.status === 'pending' ? 'bg-amber-600/90 text-white' : 'bg-red-600/90 text-white'}`}>
-                                    {booking.status}
-                                  </span>
-
-                                  {String(trip.createdBy) === String(currentUser?._id) && booking.status === 'pending' && trip.status === 'upcoming' && (
-                                    <>
-                                      <button onClick={() => acceptBooking(trip._id, booking._id)} className="text-green-400 hover:text-green-300 text-xs p-1 rounded-full" title="Accept booking">
-                                        <i className="fas fa-check"></i>
-                                      </button>
-                                      <button onClick={() => rejectBooking(trip._id, booking._id)} className="text-red-400 hover:text-red-300 text-xs p-1 rounded-full" title="Reject booking">
-                                        <i className="fas fa-times"></i>
-                                      </button>
-                                    </>
-                                  )}
-                                </div>
+                                ))}
                               </div>
-                            ))}
-                          </div>
+                            </div>
+                          ) : (
+                            <p>No forecast available</p>
+                          )}
+
+                          {/* Bookings */}
+                          {trip.bookings?.length > 0 && (
+                            <div>
+                              <h4 className="text-white font-medium mb-1">Bookings</h4>
+                              {trip.bookings.map((booking) => (
+                                <div
+                                  key={booking._id}
+                                  className="flex justify-between items-center bg-[rgba(255,255,255,0.03)] p-2 rounded-lg border border-[rgba(255,255,255,0.06)]"
+                                >
+                                  <span>{booking.user?.email || "User"}</span>
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className={`px-2 py-0.5 rounded-full text-[10px] ${booking.status === "accepted"
+                                          ? "bg-green-600/80 text-white"
+                                          : booking.status === "pending"
+                                            ? "bg-amber-600/80 text-white"
+                                            : "bg-red-600/80 text-white"
+                                        }`}
+                                    >
+                                      {booking.status}
+                                    </span>
+
+                                    {/* Accept/Reject Buttons */}
+                                    {String(trip.createdBy) === String(currentUser?._id) &&
+                                      booking.status === "pending" &&
+                                      trip.status === "upcoming" && (
+                                        <>
+                                          <button
+                                            onClick={() =>
+                                              acceptBooking(trip._id, booking._id)
+                                            }
+                                            className="text-green-400 hover:text-green-300 text-xs"
+                                            title="Accept"
+                                          >
+                                            <i className="fas fa-check"></i>
+                                          </button>
+                                          <button
+                                            onClick={() =>
+                                              rejectBooking(trip._id, booking._id)
+                                            }
+                                            className="text-red-400 hover:text-red-300 text-xs"
+                                            title="Reject"
+                                          >
+                                            <i className="fas fa-times"></i>
+                                          </button>
+                                        </>
+                                      )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -942,24 +990,40 @@ const Dashboard = () => {
             </>
           )}
 
+
+
           {/* ===================== MY BOOKINGS ===================== */}
           {currentTab === 'bookings' && (
             <>
               <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                  <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white m-0 [text-shadow:2px_2px_8px_rgba(0,0,0,0.7)]">My Bookings</h2>
-                  <p className="text-[#a9b1c3] text-sm sm:text-base mt-1">Trips you've booked</p>
+                  <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white m-0 [text-shadow:2px_2px_8px_rgba(0,0,0,0.7)]">
+                    My Bookings
+                  </h2>
+                  <p className="text-[#a9b1c3] text-sm sm:text-base mt-1">
+                    Trips you've booked
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <select
                     value={activeFilter.bookings}
-                    onChange={(e) => setActiveFilter((prev) => ({ ...prev, bookings: e.target.value }))}
+                    onChange={(e) =>
+                      setActiveFilter((prev) => ({ ...prev, bookings: e.target.value }))
+                    }
                     className="px-3 py-2 bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.12)] rounded-xl text-white text-sm focus:outline-none focus:border-violet-500"
                   >
-                    <option value="all" className="bg-[#0f1220] text-white">All</option>
-                    <option value="upcoming" className="bg-[#0f1220] text-white">Upcoming</option>
-                    <option value="past" className="bg-[#0f1220] text-white">Past</option>
-                    <option value="cancelled" className="bg-[#0f1220] text-white">Cancelled</option>
+                    <option value="all" className="bg-[#0f1220] text-white">
+                      All
+                    </option>
+                    <option value="upcoming" className="bg-[#0f1220] text-white">
+                      Upcoming
+                    </option>
+                    <option value="past" className="bg-[#0f1220] text-white">
+                      Past
+                    </option>
+                    <option value="cancelled" className="bg-[#0f1220] text-white">
+                      Cancelled
+                    </option>
                   </select>
                 </div>
               </div>
@@ -967,8 +1031,13 @@ const Dashboard = () => {
               {getFilteredBookings().length === 0 ? (
                 <div className="text-center py-12 sm:py-16 bg-[rgba(255,255,255,0.04)] rounded-[22px] border border-[rgba(255,255,255,0.08)]">
                   <i className="fas fa-calendar-check text-5xl sm:text-6xl text-[#a9b1c3]/30 mb-4"></i>
-                  <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">No bookings yet</h3>
-                  <p className="text-[#a9b1c3] mb-6">Join some trips to see your bookings here!</p>
+                  <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">
+                    No bookings yet
+                  </h3>
+                  <p className="text-[#a9b1c3] mb-6">
+                    Join some trips to see your bookings here!
+                  </p>
+
                   <button
                     onClick={() => setCurrentTab('discover')}
                     className="px-6 py-3 bg-gradient-to-br from-violet-600 to-cyan-500 text-white rounded-xl font-semibold hover:scale-105 transition-all shadow-[0_10px_24px_rgba(124,58,237,0.35)]"
@@ -977,71 +1046,101 @@ const Dashboard = () => {
                   </button>
                 </div>
               ) : (
-                <div className="space-y-4 sm:space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                   {getFilteredBookings().map((booking) => {
                     const bookingCancelable = isBookingCancelable(booking);
-                    return (
-                      <div key={booking._id} className="bg-[rgba(255,255,255,0.06)] backdrop-blur-xl border border-[rgba(255,255,255,0.1)] rounded-[22px] p-4 sm:p-6 overflow-hidden hover:shadow-[0_15px_40px_rgba(124,58,237,0.25)] transition-all group">
-                        {/* Hide images in My Bookings as requested */}
-                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                          <div className="flex-1">
-                            <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-white mb-2 truncate">{booking.title}</h3>
-                            <div className="flex items-center gap-2 mb-3 sm:mb-4">
-                              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                                getBookingStatus(booking) === 'upcoming' ? 'bg-green-600/90' :
-                                getBookingStatus(booking) === 'completed' ? 'bg-blue-600/90' :
-                                getBookingStatus(booking) === 'cancelled' ? 'bg-red-600/90' : 'bg-gray-600/90'
-                              } text-white`}>
-                                {getBookingStatus(booking)}
-                              </span>
-                              {booking.mySeatsBooked > 0 && <span className="px-3 py-1 bg-violet-600/90 text-white rounded-full text-xs font-semibold">{booking.mySeatsBooked} seats</span>}
-                            </div>
 
+                    return (
+                      <div
+                        key={booking._id}
+                        className="bg-[rgba(255,255,255,0.06)] backdrop-blur-xl border border-[rgba(255,255,255,0.1)] rounded-[22px] overflow-hidden hover:shadow-[0_18px_60px_rgba(124,58,237,0.15)] transition-all flex flex-col min-h-[480px] sm:min-h-[500px]"
+                      >
+                        {/* 🖼️ Trip Image (smaller size, flush top) */}
+                        {booking.image && (
+                          <img
+                            src={booking.image}
+                            alt={booking.title}
+                            className="w-full h-40 sm:h-34 object-cover rounded-t-[22px]"
+                          />
+                        )}
+
+                        <div className="p-5 flex flex-col justify-between flex-1">
+                          {/* 🧭 Header */}
+                          <div className="flex items-start justify-between mb-2">
+                            <div>
+                              <h3 className="text-lg sm:text-xl font-bold text-white mb-1">
+                                {booking.title}
+                              </h3>
+                              <p className="text-[#a9b1c3] text-sm">
+                                {booking.from} → {booking.to}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-white font-bold">
+                                ₹
+                                {(booking.pricePerPerson || 0) *
+                                  (booking.mySeatsBooked || 1)}
+                              </span>
+                              <p className="text-xs text-[#a9b1c3]">Total for you</p>
+                            </div>
+                          </div>
+                          {/* 🎯 Status + Seats */}
+                          <div className="flex items-center gap-1 mb-1">
+                            <span
+                              className={`px-3 py-1 rounded-full text-xs font-semibold ${getBookingStatus(booking) === 'upcoming'
+                                  ? 'bg-green-600/90'
+                                  : getBookingStatus(booking) === 'completed'
+                                    ? 'bg-blue-600/90'
+                                    : getBookingStatus(booking) === 'cancelled'
+                                      ? 'bg-red-600/90'
+                                      : 'bg-gray-600/90'
+                                } text-white`}
+                            >
+                              {getBookingStatus(booking)}
+                            </span>
+
+                            {booking.mySeatsBooked > 0 && (
+                              <span className="px-3 py-1 bg-violet-600/90 text-white rounded-full text-xs font-semibold">
+                                {booking.mySeatsBooked} seats
+                              </span>
+                            )}
+                          </div>
+
+                          {/* 📅 Trip Info */}
+                          <div className="text-sm text-[#a9b1c3] space-y-1 mb-3">
+                            <div className="flex items-center gap-2">
+                              <i className="fas fa-calendar text-cyan-400 w-4"></i>
+                              {new Date(booking.startDate).toLocaleDateString()} -{' '}
+                              {new Date(booking.endDate).toLocaleDateString()}
+                            </div>
                             {booking.daysLeft > 0 && (
-                              <div className="flex items-center gap-2 mb-4 text-[#a9b1c3]">
+                              <div className="flex items-center gap-2 text-[#a9b1c3]">
                                 <i className="fas fa-clock text-cyan-400"></i>
                                 <span>{booking.daysLeft} days left</span>
                               </div>
                             )}
-
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => cancelBooking(booking._id)}
-                                disabled={!bookingCancelable}
-                                className={`px-3 py-2 ${bookingCancelable ? 'bg-red-600/90 hover:bg-red-700' : 'bg-gray-600/60 cursor-not-allowed'} text-white rounded-xl font-semibold text-xs sm:text-sm hover:transition-all flex items-center gap-2`}
-                              >
-                                <i className="fas fa-times"></i> Cancel Booking
-                              </button>
-                            </div>
+                            
                           </div>
 
-                          <div className="flex flex-col items-end gap-2 text-sm sm:text-base">
-                            <span className="text-white font-bold">${(booking.pricePerPerson || 0) * (booking.mySeatsBooked || 1)}</span>
-                            <span className="text-[#a9b1c3]">Total for you</span>
+                          {/* 🌤️ Weather Section */}
+
+                          {/* 🚀 Actions */}
+                          <div className="flex items-center justify-between mt-3">
+                            <button
+                              onClick={() => cancelBooking(booking._id)}
+                              disabled={!bookingCancelable}
+                              className={`px-3 py-2 rounded-xl text-sm font-semibold flex items-center gap-1 transition-all ${bookingCancelable
+                                  ? 'bg-red-600/90 hover:bg-red-700 text-white'
+                                  : 'bg-gray-600/60 cursor-not-allowed text-white'
+                                }`}
+                            >
+                              <i className="fas fa-times"></i> Cancel Booking
+                              
+                            </button>
+                            
                           </div>
+                          
                         </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-4">
-                          <div className="flex items-center gap-2 text-[#a9b1c3] text-sm"><i className="fas fa-map-marker-alt text-cyan-400 w-4"></i><span>{booking.from} → {booking.to}</span></div>
-                          <div className="flex items-center gap-2 text-[#a9b1c3] text-sm"><i className="fas fa-calendar text-cyan-400 w-4"></i><span>{new Date(booking.startDate).toLocaleDateString()} - {new Date(booking.endDate).toLocaleDateString()}</span></div>
-                        </div>
-
-                        {/* Weather */}
-                        {booking.weather && booking.weather.length > 0 && (
-                          <div className="mt-4 p-3 bg-[rgba(255,255,255,0.04)] rounded-xl border border-[rgba(255,255,255,0.08)]">
-                            <h4 className="text-sm font-semibold text-white mb-2">Weather Forecast</h4>
-                            <div className="flex gap-3 overflow-x-auto pb-2">
-                              {booking.weather.map((w, idx) => (
-                                <div key={idx} className="flex flex-col items-center min-w-[80px] bg-[rgba(255,255,255,0.04)] p-2 rounded-lg border border-[rgba(255,255,255,0.08)]">
-                                  <img src={`https://openweathermap.org/img/wn/${w.icon}@2x.png`} alt={w.description} className="w-8 h-8" />
-                                  <span className="text-xs text-white mt-1">{new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                                  <span className="text-xs font-medium text-white">{Math.round(w.temp)}°C</span>
-                                  <span className="text-[10px] text-[#a9b1c3] capitalize">{w.description}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
                       </div>
                     );
                   })}
@@ -1050,14 +1149,21 @@ const Dashboard = () => {
             </>
           )}
 
+
           {/* ===================== DISCOVER ===================== */}
           {currentTab === 'discover' && (
             <div>
+              <ChatWidget />
               <div className="mb-6">
-                <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white">Discover Trips</h2>
-                <p className="text-[#a9b1c3] text-sm sm:text-base mt-1">Trips available to join — full details shown</p>
+                <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white">
+                  Discover Trips
+                </h2>
+                <p className="text-[#a9b1c3] text-sm sm:text-base mt-1">
+                  Explore available trips — join or view details
+                </p>
               </div>
 
+              {/* 🔍 Search */}
               <div className="mb-4">
                 <form onSubmit={handleSearchSubmit} className="flex gap-2">
                   <input
@@ -1067,152 +1173,230 @@ const Dashboard = () => {
                     onChange={handleSearchInput}
                     className="flex-1 px-4 py-3 bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.12)] rounded-xl text-white placeholder-[#a9b1c3] focus:outline-none focus:border-violet-500"
                   />
-                  <button type="submit" className="px-4 py-3 bg-gradient-to-br from-violet-600 to-cyan-500 rounded-xl font-semibold hover:scale-105 transition-all">
+                  <button
+                    type="submit"
+                    className="px-4 py-3 bg-gradient-to-br from-violet-600 to-cyan-500 rounded-xl font-semibold hover:scale-105 transition-all"
+                  >
                     Search
                   </button>
                 </form>
               </div>
 
+              {/* 🧳 Discover Cards */}
               {availableTrips.length === 0 ? (
                 <div className="text-center py-12 bg-[rgba(255,255,255,0.04)] rounded-[22px] border border-[rgba(255,255,255,0.08)]">
-                  <p className="text-[#a9b1c3]">No trips available right now. Check later or create one!</p>
+                  <p className="text-[#a9b1c3]">
+                    No trips available to discover right now. Check later or create one!
+                  </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                   {availableTrips.map((trip) => {
-                    // detect if user already booked (either from myBookings or trip.bookings list)
                     const alreadyBooked =
                       myBookings.some((b) => String(b.tripId || b._id) === String(trip._id)) ||
-                      (trip.bookings || []).some((b) => b.user && String(b.user._id) === String(currentUser?._id));
+                      (trip.bookings || []).some(
+                        (b) => b.user && String(b.user._id) === String(currentUser?._id)
+                      );
 
                     const isFlipped = flipped.has(trip._id);
 
                     return (
-                      <div key={trip._id} className="discover-card-3d">
-                        <div className={`discover-card-inner ${isFlipped ? 'flipped' : ''}`}>
-                          {/* FRONT SIDE (card content) */}
-                          <div className="discover-card-front bg-[rgba(255,255,255,0.06)] backdrop-blur-xl border border-[rgba(255,255,255,0.1)] rounded-[22px] p-4 sm:p-6 overflow-hidden hover:shadow-[0_18px_60px_rgba(124,58,237,0.12)] transition-all group">
-                            <div className="flex flex-col sm:flex-row gap-4 items-start">
-                              {/* Slightly bigger image (left on desktop, top on mobile) */}
-                              <div className="flex-shrink-0 w-full sm:w-44 sm:max-w-[192px]">
-                                {trip.image ? (
-                                  <img
-                                    src={trip.image}
-                                    alt={trip.title}
-                                    className="w-full h-40 sm:h-full object-cover rounded-lg shadow-[0_8px_24px_rgba(0,0,0,0.45)] block"
-                                  />
-                                ) : (
-                                  <div className="w-full h-40 sm:h-full rounded-lg bg-[rgba(255,255,255,0.02)] flex items-center justify-center text-[#a9b1c3]">
-                                    <i className="fas fa-image text-2xl"></i>
+                      <div
+                        key={trip._id}
+                        className="relative h-[520px]"
+                        style={{ perspective: "1200px" }}
+                      >
+                        <div
+                          className="relative w-full h-full transition-transform duration-700 ease-in-out"
+                          style={{
+                            transformStyle: "preserve-3d",
+                            transform: isFlipped ? "rotateY(180deg)" : "rotateY(0deg)",
+                          }}
+                        >
+                          {/* FRONT SIDE */}
+                          <div
+                            className="absolute inset-0 w-full h-full bg-[rgba(255,255,255,0.06)] backdrop-blur-xl border border-[rgba(255,255,255,0.1)] rounded-2xl overflow-hidden flex flex-col hover:shadow-[0_18px_60px_rgba(124,58,237,0.12)] transition-all"
+                            style={{ backfaceVisibility: "hidden" }}
+                          >
+                            {/*  Image flush with card */}
+                            <div className="w-full h-30 sm:h-26">
+                              {trip.image ? (
+                                <img
+                                  src={trip.image}
+                                  alt={trip.title}
+                                  className="w-full h-full object-cover rounded-t-2xl"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center bg-[rgba(255,255,255,0.03)] text-[#a9b1c3] rounded-t-2xl">
+                                  <i className="fas fa-image text-3xl"></i>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Content */}
+                            <div className="flex flex-col justify-between flex-1 p-2">
+                              {/* Header */}
+                              <div className="flex justify-between items-start mb-2">
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="text-lg font-bold text-white truncate">
+                                    {trip.title}
+                                  </h3>
+                                  <p className="text-[#a9b1c3] text-sm mt-1">
+                                    {trip.from} → {trip.to}
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <span className="text-white font-bold">
+                                    ₹{trip.pricePerPerson}/person
+                                  </span>
+                                  <div className="text-[#a9b1c3] text-xs">
+                                    {trip.availableSeats} seats left
                                   </div>
-                                )}
+                                  <span
+                                    className={`inline-block mt-1 px-2 py-1 rounded-full text-xs font-semibold ${trip.status === "upcoming"
+                                        ? "bg-green-600/90"
+                                        : trip.status === "ongoing"
+                                          ? "bg-amber-600/90"
+                                          : "bg-blue-600/90"
+                                      } text-white`}
+                                  >
+                                    {trip.status}
+                                  </span>
+                                </div>
                               </div>
 
-                              <div className="flex-1 min-w-0 flex flex-col">
-                                <div className="flex items-start justify-between gap-4">
-                                  <div className="min-w-0">
-                                    <h3 className="text-lg sm:text-xl font-bold text-white truncate">{trip.title}</h3>
-                                    <p className="text-[#a9b1c3] text-sm mt-1">{trip.from} → {trip.to}</p>
-                                  </div>
-                                  <div className="text-right">
-                                    <div className="text-white font-bold">Rs. {trip.pricePerPerson}/person</div>
-                                    <div className="text-[#a9b1c3] text-sm">{trip.availableSeats} seats left</div>
-                                    <div
-                                      className={`mt-2 px-2 py-1 rounded-full text-xs font-semibold ${
-                                        trip.status === 'upcoming'
-                                          ? 'bg-green-600/90'
-                                          : trip.status === 'ongoing'
-                                          ? 'bg-amber-600/90'
-                                          : trip.status === 'completed'
-                                          ? 'bg-blue-600/90'
-                                          : 'bg-gray-600/90'
-                                      } text-white`}
-                                    >
-                                      {trip.status}
-                                    </div>
-                                  </div>
+                              {/* Details */}
+                              <div className="text-sm text-[#a9b1c3] space-y-1 mb-2">
+                                <div className="flex items-center gap-2">
+                                  <i className="fas fa-calendar text-cyan-400 w-4"></i>
+                                  {new Date(trip.startDate).toLocaleDateString()} -{" "}
+                                  {new Date(trip.endDate).toLocaleDateString()}
                                 </div>
-
-                                {/* compact details grid (single date only) */}
-                                <div className="mt-3 text-[#a9b1c3] text-sm grid grid-cols-2 gap-2">
-                                  <div className="flex items-center gap-2"><i className="fas fa-calendar text-cyan-400 w-3"></i><span>{new Date(trip.startDate).toLocaleDateString()} - {new Date(trip.endDate).toLocaleDateString()}</span></div>
-                                  <div className="flex items-center gap-2"><i className={`fas ${getTransportIcon(trip.modeOfTransport)} text-cyan-400 w-3`}></i><span>{trip.modeOfTransport || 'Car'}</span></div>
-                                  <div className="flex items-center gap-2"><i className="fas fa-users text-cyan-400 w-3"></i><span>Booked: {Array.isArray(trip.bookings) ? trip.bookings.length : 0}</span></div>
-                                  <div className="flex items-center gap-2"><i className="fas fa-phone text-cyan-400 w-3"></i><span>{trip.phoneNo || 'N/A'}</span></div>
+                                <div className="flex items-center gap-2">
+                                  <i
+                                    className={`fas ${getTransportIcon(
+                                      trip.modeOfTransport
+                                    )} text-cyan-400 w-4`}
+                                  />
+                                  {trip.modeOfTransport || "Car"}
                                 </div>
+                                <div className="flex items-center gap-2">
+                                  <i className="fas fa-users text-cyan-400 w-4"></i>
+                                  Booked:{" "}
+                                  {Array.isArray(trip.bookings) ? trip.bookings.length : 0}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <i className="fas fa-phone text-cyan-400 w-4"></i>
+                                  {trip.phoneNo || "N/A"}
+                                </div>
+                              </div>
 
-                                {/* Weather — scrollable horizontally if long */}
-                                {trip.weather && trip.weather.length > 0 && (
-                                  <div className="mt-3">
-                                    <h4 className="text-sm font-semibold text-white mb-2">Weather Forecast</h4>
-                                    <div className="flex gap-3 overflow-x-auto pb-2 weather-scroll">
-                                      {trip.weather.map((w, idx) => (
-                                        <div key={idx} className="flex flex-col items-center min-w-[90px] bg-[rgba(255,255,255,0.02)] p-2 rounded-md border border-[rgba(255,255,255,0.04)]">
-                                          <img className="w-10 h-10" src={`https://openweathermap.org/img/wn/${w.icon}@2x.png`} alt={w.description} />
-                                          <div className="text-xs text-white mt-1">{Math.round(w.temp)}°C</div>
-                                          <div className="text-[11px] text-[#a9b1c3]">{new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
-                                          <div className="text-[10px] text-[#a9b1c3] capitalize mt-1">{w.description}</div>
+                              {/* Weather Scroll */}
+                              {trip.weather && trip.weather.length > 0 && (
+                                <div className="mt-3">
+                                  <h4 className="text-sm font-semibold text-white mb-2">
+                                    Weather Forecast
+                                  </h4>
+                                  <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-[rgba(255,255,255,0.25)] scrollbar-track-transparent">
+                                    {trip.weather.map((w, idx) => (
+                                      <div
+                                        key={idx}
+                                        className="flex flex-col items-center bg-[rgba(255,255,255,0.05)] p-2 rounded-md min-w-[80px]"
+                                      >
+                                        <img
+                                          src={`https://openweathermap.org/img/wn/${w.icon}@2x.png`}
+                                          alt={w.description}
+                                          className="w-8 h-8"
+                                        />
+                                        <div className="text-xs text-white mt-1">
+                                          {Math.round(w.temp)}°C
                                         </div>
-                                      ))}
-                                    </div>
+                                        <div className="text-[10px] text-[#a9b1c3] capitalize">
+                                          {w.description}
+                                        </div>
+                                      </div>
+                                    ))}
                                   </div>
-                                )}
-
-                                {/* actions */}
-                                <div className="mt-4 flex items-center gap-3">
-                                  <button
-                                    disabled={alreadyBooked || trip.availableSeats <= 0 || trip.status !== 'upcoming'}
-                                    onClick={() => {
-                                      setSelectedTripId(trip._id);
-                                      setShowJoinModal(true);
-                                    }}
-                                    className={`px-4 py-2 rounded-xl font-semibold text-sm transition-all ${
-                                      alreadyBooked || trip.availableSeats <= 0 || trip.status !== 'upcoming'
-                                        ? 'bg-gray-600/60 cursor-not-allowed text-white'
-                                        : 'bg-gradient-to-br from-violet-600 to-cyan-500 text-white hover:scale-105 shadow-[0_6px_16px_rgba(124,58,237,0.45)]'
-                                    }`}
-                                  >
-                                    {alreadyBooked ? 'Already Joined' : trip.availableSeats <= 0 ? 'Full' : 'Join'}
-                                  </button>
-
-                                  <button
-                                    onClick={() => toggleFlip(trip._id)}
-                                    className="px-3 py-2 bg-[rgba(255,255,255,0.04)] text-sm rounded-lg border border-[rgba(255,255,255,0.06)] hover:bg-[rgba(255,255,255,0.06)]"
-                                  >
-                                    View
-                                  </button>
-
-                                  <span className="text-xs text-[#a9b1c3] ml-auto">Owner: <span className="text-white">{trip.createdBy?.email || trip.ownerEmail || 'Host'}</span></span>
                                 </div>
+                              )}
+
+                              {/* Actions */}
+                              <div className="flex items-center justify-between mt-4 gap-4">
+                                <button
+                                  disabled={
+                                    alreadyBooked ||
+                                    trip.availableSeats <= 0 ||
+                                    trip.status !== "upcoming"
+                                  }
+                                  onClick={() => {
+                                    setSelectedTripId(trip._id);
+                                    setShowJoinModal(true);
+                                  }}
+                                  className={`px-4 py-2 rounded-xl font-semibold text-sm transition-all ${alreadyBooked ||
+                                      trip.availableSeats <= 0 ||
+                                      trip.status !== "upcoming"
+                                      ? "bg-gray-600/60 cursor-not-allowed text-white"
+                                      : "bg-gradient-to-br from-violet-600 to-cyan-500 text-white hover:scale-105 shadow-[0_6px_16px_rgba(124,58,237,0.45)]"
+                                    }`}
+                                >
+                                  {alreadyBooked
+                                    ? "Already Joined"
+                                    : trip.availableSeats <= 0
+                                      ? "Full"
+                                      : "Join"}
+                                </button>
+
+                                <button
+                                  onClick={() => toggleFlip(trip._id)}
+                                  className="px-4 py-2 bg-[rgba(255,255,255,0.04)] text-sm rounded-xl border border-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.08)] transition-all"
+                                >
+                                  View
+                                </button>
+
+                                <span className="text-xs text-[#a9b1c3] ml-auto">
+                                  Owner:{" "}
+                                  <span className="text-white">
+                                    {trip.createdBy?.email || trip.ownerEmail || "Host"}
+                                  </span>
+                                </span>
                               </div>
                             </div>
                           </div>
 
-                          {/* BACK SIDE (bigger image view) */}
-                          <div className="discover-card-back bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.04)] rounded-[22px] p-4 sm:p-6 flex items-center justify-center">
-                            <div className="w-full">
-                              <div className="relative">
-                                {trip.image ? (
-                                  <img src={trip.image} alt={trip.title} className="w-full h-56 sm:h-72 object-cover rounded-[16px] shadow-[0_10px_30px_rgba(0,0,0,0.6)]" />
-                                ) : (
-                                  <div className="w-full h-56 sm:h-72 flex items-center justify-center bg-[rgba(255,255,255,0.02)] rounded-[16px]">
-                                    <i className="fas fa-image text-3xl text-[#a9b1c3]"></i>
-                                  </div>
-                                )}
-
-                                <button
-                                  onClick={() => toggleFlip(trip._id)}
-                                  className="absolute top-3 right-3 bg-[rgba(15,18,32,0.6)] text-white px-3 py-1 rounded-lg border border-[rgba(255,255,255,0.06)]"
-                                >
-                                  Close
-                                </button>
-
-                                <div className="mt-3 text-left">
-                                  <h3 className="text-lg font-bold text-white">{trip.title}</h3>
-                                  <p className="text-xs text-[#a9b1c3]">Owner: <span className="text-white">{trip.createdBy?.email || trip.ownerEmail || 'Host'}</span></p>
-                                </div>
+                          {/* BACK SIDE */}
+                          <div
+                            className="absolute inset-0 w-full h-full bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.08)] rounded-2xl p-4 flex flex-col items-center justify-center"
+                            style={{
+                              transform: "rotateY(180deg)",
+                              backfaceVisibility: "hidden",
+                            }}
+                          >
+                            {trip.image ? (
+                              <img
+                                src={trip.image}
+                                alt={trip.title}
+                                className="w-full h-64 object-cover rounded-[16px] shadow-[0_8px_30px_rgba(0,0,0,0.5)] mb-4"
+                              />
+                            ) : (
+                              <div className="w-full h-64 flex items-center justify-center bg-[rgba(255,255,255,0.05)] rounded-[16px] mb-4">
+                                <i className="fas fa-image text-3xl text-[#a9b1c3]"></i>
                               </div>
-                            </div>
+                            )}
+
+                            <h3 className="text-lg font-bold text-white">{trip.title}</h3>
+                            <p className="text-xs text-[#a9b1c3] mt-1">
+                              Hosted by{" "}
+                              <span className="text-white">
+                                {trip.createdBy?.email || trip.ownerEmail || "Host"}
+                              </span>
+                            </p>
+
+                            <button
+                              onClick={() => toggleFlip(trip._id)}
+                              className="mt-4 px-4 py-2 bg-[rgba(0,0,0,0.5)] text-white rounded-lg border border-[rgba(255,255,255,0.1)] hover:bg-[rgba(0,0,0,0.6)] transition-all"
+                            >
+                              Close
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -1282,6 +1466,21 @@ const Dashboard = () => {
                     <label className="block font-semibold text-white text-sm sm:text-base">Price per Person</label>
                     <input name="pricePerPerson" type="number" min="0" step="0.01" required className="w-full px-4 py-3 bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.12)] rounded-xl text-white" />
                   </div>
+                </div>
+                {/* Mode of Transport */}
+                <div>
+                  <label className="block font-semibold text-white text-sm sm:text-base">Mode of transport</label>
+                  <select
+                    name="modeOfTransport"
+                    defaultValue=""
+                    className="w-full px-4 py-3 bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.12)] rounded-xl text-grey bg-grey-599"
+                  >
+                    <option value="">Select (optional)</option>
+                    <option value="bus">Bus</option>
+                    <option value="railway">Railway</option>
+                    <option value="airplane">Airplane</option>
+                    <option value="airplane">Car</option>
+                  </select>
                 </div>
 
                 <div>
