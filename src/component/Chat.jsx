@@ -14,7 +14,7 @@ export default function ChatWidget() {
      setInput("");
     try {
       const res = await axios.post(
-        "http://localhost:3000/chat/create",
+        "https://trip-planner-backend-y5v9.onrender.com/chat/create",
         { message: input },
         { headers: { "Content-Type": "application/json" } }
       );
