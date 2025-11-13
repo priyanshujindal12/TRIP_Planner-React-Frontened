@@ -28,7 +28,7 @@ const Dashboard = () => {
   const [openTripId, setOpenTripId] = useState(null);
   const [flipped, setFlipped] = useState(() => new Set());
 
-  const API_BASE = 'https://trip-planner-backend-y5v9.onrender.com';
+  const API_BASE = 'http://localhost:3000';
   const decodeToken = useCallback(() => {
     try {
       const token = localStorage.getItem('token');
@@ -452,6 +452,7 @@ const Dashboard = () => {
   };
 
   const getBookingStatus = (booking) => {
+    if (booking.status === 'rejected') return 'rejected';
     if (booking.isCancelled) return 'cancelled';
     if (booking.isPast) return 'completed';
     if (booking.isUpcoming) return 'upcoming';
@@ -565,11 +566,19 @@ const Dashboard = () => {
     return trip && trip.status === 'upcoming';
   };
 
-  const isBookingCancelable = (booking) => {
-    // booking.isUpcoming is used when available; fallback to status check
-    if (typeof booking.isUpcoming !== 'undefined') return booking.isUpcoming === true;
-    return getBookingStatus(booking) === 'upcoming';
-  };
+const canCancelBooking = (booking) => {
+  const now = new Date();
+  const tripStart = new Date(booking.startDate);
+
+  return (
+    booking.status === "pending" &&   // user has not been accepted/rejected
+    tripStart > now                   // trip not started yet
+  );
+};
+
+
+
+
 
   /* ===================== RENDER ===================== */
   return (
@@ -584,22 +593,22 @@ const Dashboard = () => {
           <div
             key={notif.id}
             className={`flex items-center gap-3 px-4 py-3 sm:px-6 sm:py-4 rounded-xl shadow-2xl backdrop-blur-xl border border-white/10 text-white animate-bounceIn ${notif.type === 'success'
-                ? 'bg-green-600/90'
-                : notif.type === 'warning'
-                  ? 'bg-amber-600/90'
-                  : notif.type === 'error'
-                    ? 'bg-red-600/90'
-                    : 'bg-violet-600/90'
+              ? 'bg-green-600/90'
+              : notif.type === 'warning'
+                ? 'bg-amber-600/90'
+                : notif.type === 'error'
+                  ? 'bg-red-600/90'
+                  : 'bg-violet-600/90'
               }`}
           >
             <i
               className={`fas fa-${notif.type === 'success'
-                  ? 'check-circle'
-                  : notif.type === 'warning'
-                    ? 'exclamation-triangle'
-                    : notif.type === 'error'
-                      ? 'times-circle'
-                      : 'info-circle'
+                ? 'check-circle'
+                : notif.type === 'warning'
+                  ? 'exclamation-triangle'
+                  : notif.type === 'error'
+                    ? 'times-circle'
+                    : 'info-circle'
                 }`}
             />
             <span className="text-sm sm:text-base">{notif.message}</span>
@@ -659,8 +668,8 @@ const Dashboard = () => {
                     if (window.innerWidth < 640) setIsSidebarOpen(false);
                   }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${currentTab === item.id
-                      ? 'bg-gradient-to-br from-violet-600 to-cyan-500 text-white shadow-[0_10px_24px_rgba(124,58,237,0.35)]'
-                      : 'text-[#a9b1c3] hover:bg-[rgba(255,255,255,0.08)] hover:text-white'
+                    ? 'bg-gradient-to-br from-violet-600 to-cyan-500 text-white shadow-[0_10px_24px_rgba(124,58,237,0.35)]'
+                    : 'text-[#a9b1c3] hover:bg-[rgba(255,255,255,0.08)] hover:text-white'
                     }`}
                 >
                   <i className={`fas ${item.icon} w-5`}></i>
@@ -839,12 +848,12 @@ const Dashboard = () => {
                         <h3 className="text-lg font-semibold text-white truncate">{trip.title}</h3>
                         <span
                           className={`px-2 py-1 text-xs font-semibold rounded-full ${trip.status === "upcoming"
-                              ? "bg-green-600/80"
-                              : trip.status === "ongoing"
-                                ? "bg-amber-600/80"
-                                : trip.status === "completed"
-                                  ? "bg-blue-600/80"
-                                  : "bg-gray-600/80"
+                            ? "bg-green-600/80"
+                            : trip.status === "ongoing"
+                              ? "bg-amber-600/80"
+                              : trip.status === "completed"
+                                ? "bg-blue-600/80"
+                                : "bg-gray-600/80"
                             } text-white`}
                         >
                           {trip.status}
@@ -880,8 +889,8 @@ const Dashboard = () => {
                           onClick={() => cancelTrip(trip._id)}
                           disabled={!isTripCancelable(trip)}
                           className={`text-xs font-semibold px-3 py-1.5 rounded-xl flex items-center gap-2 ${isTripCancelable(trip)
-                              ? "bg-red-600/90 hover:bg-red-700 text-white"
-                              : "bg-gray-600/50 text-gray-400 cursor-not-allowed"
+                            ? "bg-red-600/90 hover:bg-red-700 text-white"
+                            : "bg-gray-600/50 text-gray-400 cursor-not-allowed"
                             } transition-all`}
                         >
                           <i className="fas fa-times"></i> Cancel
@@ -942,17 +951,18 @@ const Dashboard = () => {
                                   <div className="flex items-center gap-2">
                                     <span
                                       className={`px-2 py-0.5 rounded-full text-[10px] ${booking.status === "accepted"
-                                          ? "bg-green-600/80 text-white"
-                                          : booking.status === "pending"
-                                            ? "bg-amber-600/80 text-white"
-                                            : "bg-red-600/80 text-white"
+                                        ? "bg-green-600/80 text-white"
+                                        : booking.status === "pending"
+                                          ? "bg-amber-600/80 text-white"
+                                          : "bg-red-600/80 text-white"
                                         }`}
                                     >
                                       {booking.status}
                                     </span>
 
                                     {/* Accept/Reject Buttons */}
-                                    {String(trip.createdBy) === String(currentUser?._id) &&
+                                    {String(trip.createdBy?._id || trip.createdBy) === String(currentUser?._id) &&
+
                                       booking.status === "pending" &&
                                       trip.status === "upcoming" && (
                                         <>
@@ -1048,7 +1058,7 @@ const Dashboard = () => {
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                   {getFilteredBookings().map((booking) => {
-                    const bookingCancelable = isBookingCancelable(booking);
+                    const bookingCancelable = canCancelBooking(booking);
 
                     return (
                       <div
@@ -1088,16 +1098,19 @@ const Dashboard = () => {
                           <div className="flex items-center gap-1 mb-1">
                             <span
                               className={`px-3 py-1 rounded-full text-xs font-semibold ${getBookingStatus(booking) === 'upcoming'
-                                  ? 'bg-green-600/90'
-                                  : getBookingStatus(booking) === 'completed'
-                                    ? 'bg-blue-600/90'
-                                    : getBookingStatus(booking) === 'cancelled'
+                                ? 'bg-green-600/90'
+                                : getBookingStatus(booking) === 'completed'
+                                  ? 'bg-blue-600/90'
+                                  : getBookingStatus(booking) === 'cancelled'
+                                    ? 'bg-gray-600/90'
+                                    : getBookingStatus(booking) === 'rejected'
                                       ? 'bg-red-600/90'
-                                      : 'bg-gray-600/90'
+                                      : 'bg-gray-600/60'
                                 } text-white`}
                             >
                               {getBookingStatus(booking)}
                             </span>
+
 
                             {booking.mySeatsBooked > 0 && (
                               <span className="px-3 py-1 bg-violet-600/90 text-white rounded-full text-xs font-semibold">
@@ -1119,7 +1132,7 @@ const Dashboard = () => {
                                 <span>{booking.daysLeft} days left</span>
                               </div>
                             )}
-                            
+
                           </div>
 
                           {/* 🌤️ Weather Section */}
@@ -1127,19 +1140,19 @@ const Dashboard = () => {
                           {/* 🚀 Actions */}
                           <div className="flex items-center justify-between mt-3">
                             <button
-                              onClick={() => cancelBooking(booking._id)}
-                              disabled={!bookingCancelable}
-                              className={`px-3 py-2 rounded-xl text-sm font-semibold flex items-center gap-1 transition-all ${bookingCancelable
+                              onClick={() => cancelBooking(booking.tripId)}
+                              disabled={!canCancelBooking(booking)}
+                              className={`px-3 py-2 rounded-xl text-sm font-semibold flex items-center gap-1 transition-all ${canCancelBooking(booking)
                                   ? 'bg-red-600/90 hover:bg-red-700 text-white'
                                   : 'bg-gray-600/60 cursor-not-allowed text-white'
                                 }`}
                             >
                               <i className="fas fa-times"></i> Cancel Booking
-                              
                             </button>
-                            
+
+
                           </div>
-                          
+
                         </div>
                       </div>
                     );
@@ -1254,10 +1267,10 @@ const Dashboard = () => {
                                   </div>
                                   <span
                                     className={`inline-block mt-1 px-2 py-1 rounded-full text-xs font-semibold ${trip.status === "upcoming"
-                                        ? "bg-green-600/90"
-                                        : trip.status === "ongoing"
-                                          ? "bg-amber-600/90"
-                                          : "bg-blue-600/90"
+                                      ? "bg-green-600/90"
+                                      : trip.status === "ongoing"
+                                        ? "bg-amber-600/90"
+                                        : "bg-blue-600/90"
                                       } text-white`}
                                   >
                                     {trip.status}
@@ -1333,10 +1346,10 @@ const Dashboard = () => {
                                     setShowJoinModal(true);
                                   }}
                                   className={`px-4 py-2 rounded-xl font-semibold text-sm transition-all ${alreadyBooked ||
-                                      trip.availableSeats <= 0 ||
-                                      trip.status !== "upcoming"
-                                      ? "bg-gray-600/60 cursor-not-allowed text-white"
-                                      : "bg-gradient-to-br from-violet-600 to-cyan-500 text-white hover:scale-105 shadow-[0_6px_16px_rgba(124,58,237,0.45)]"
+                                    trip.availableSeats <= 0 ||
+                                    trip.status !== "upcoming"
+                                    ? "bg-gray-600/60 cursor-not-allowed text-white"
+                                    : "bg-gradient-to-br from-violet-600 to-cyan-500 text-white hover:scale-105 shadow-[0_6px_16px_rgba(124,58,237,0.45)]"
                                     }`}
                                 >
                                   {alreadyBooked
