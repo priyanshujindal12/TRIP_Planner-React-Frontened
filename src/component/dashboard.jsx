@@ -566,15 +566,15 @@ const Dashboard = () => {
     return trip && trip.status === 'upcoming';
   };
 
-const canCancelBooking = (booking) => {
-  const now = new Date();
-  const tripStart = new Date(booking.startDate);
+  const canCancelBooking = (booking) => {
+    const now = new Date();
+    const tripStart = new Date(booking.startDate);
 
-  return (
-    booking.status === "pending" &&   // user has not been accepted/rejected
-    tripStart > now                   // trip not started yet
-  );
-};
+    return (
+      booking.status === "pending" &&   // user has not been accepted/rejected
+      tripStart > now                   // trip not started yet
+    );
+  };
 
 
 
@@ -1143,8 +1143,8 @@ const canCancelBooking = (booking) => {
                               onClick={() => cancelBooking(booking.tripId)}
                               disabled={!canCancelBooking(booking)}
                               className={`px-3 py-2 rounded-xl text-sm font-semibold flex items-center gap-1 transition-all ${canCancelBooking(booking)
-                                  ? 'bg-red-600/90 hover:bg-red-700 text-white'
-                                  : 'bg-gray-600/60 cursor-not-allowed text-white'
+                                ? 'bg-red-600/90 hover:bg-red-700 text-white'
+                                : 'bg-gray-600/60 cursor-not-allowed text-white'
                                 }`}
                             >
                               <i className="fas fa-times"></i> Cancel Booking
@@ -1486,14 +1486,19 @@ const canCancelBooking = (booking) => {
                   <select
                     name="modeOfTransport"
                     defaultValue=""
-                    className="w-full px-4 py-3 bg-[rgba(255,255,255,0.08)] border border-[rgba(255,255,255,0.12)] rounded-xl text-grey bg-grey-599"
+                    className="w-full px-4 py-3 bg-[rgba(255,255,255,0.08)]
+             border border-[rgba(255,255,255,0.12)]
+             rounded-xl text-white
+             focus:outline-none 
+             appearance-none"
                   >
-                    <option value="">Select (optional)</option>
-                    <option value="bus">Bus</option>
-                    <option value="railway">Railway</option>
-                    <option value="airplane">Airplane</option>
-                    <option value="airplane">Car</option>
+                    <option value="" className="bg-[#0f1220] text-white">Select (optional)</option>
+                    <option value="bus" className="bg-[#0f1220] text-white">Bus</option>
+                    <option value="railway" className="bg-[#0f1220] text-white">Railway</option>
+                    <option value="airplane" className="bg-[#0f1220] text-white">Airplane</option>
+                    <option value="car" className="bg-[#0f1220] text-white">Car</option>
                   </select>
+
                 </div>
 
                 <div>
