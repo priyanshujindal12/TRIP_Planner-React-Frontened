@@ -28,7 +28,7 @@ const Dashboard = () => {
   const [openTripId, setOpenTripId] = useState(null);
   const [flipped, setFlipped] = useState(() => new Set());
 
-  const API_BASE = 'http://localhost:3000';
+  const API_BASE = 'https://trip-planner-backend-y5v9.onrender.com';
   const decodeToken = useCallback(() => {
     try {
       const token = localStorage.getItem('token');
